@@ -1,2 +1,0 @@
-# Ouroboros
-Animating symbolic transformations
