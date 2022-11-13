@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link href="css/style.css" rel="stylesheet" type="text/css">
+    <link rel="icon" href="https://clojurescript.org/images/cljs-logo-icon-32.png">
+  </head>
+
+
+  <style type="text/css">
+
+    /*=====================================
+    Variables
+    =====================================*/
+    :root{
+      --token-size: 12px;
+    }
+
+    /*=====================================
+    Defaults
+    =====================================*/
+
+    body {
+      background-color: white; /*rgb(47, 79, 79);*/
+      /*filter: brightness(1.5) contrast(1.2);*/
+      color: black;
+      font-family: "Verdana";
+      margin: 0px;
+      padding: 0px;
+    }
+
+    .app{
+      position: absolute;
+    }
+
+    /*=====================================
+    Windows
+    =====================================*/
+
+    .window{
+      border-style: solid;
+      border-color: white;
+    }
+
+    /*=====================================
+    Exposition
+    =====================================*/
+
+    .expo{
+      font-size: 12px;
+      overflow-wrap: "anywhere";
+      hyphens: auto;
+    }
+
+    /*=====================================
+    Rows & Columns
+    =====================================*/
+    .row, .col {
+      display: flex;
+      gap: 0px 0px;
+      justify-content: flex-start;
+      align-items: flex-start;
+    }
+
+    .row {
+
+      flex-direction: row;
+    }
+
+    .col{
+      /*justify-content: flex-start;*/
+      flex-direction: column;
+    }
+
+    /*=====================================
+    Indent
+    =====================================*/
+
+    .indent {
+      width: calc(1 * var(--token-size));
+    }
+
+    /*=====================================
+    Tokens
+    =====================================*/
+    .token {
+      font-size: var(--token-size);
+      opacity: 1;
+      /*margin: 0.166em 0.33em 0.166em 0.333em;*/
+     
+      /*padding-top: 2.5px 5px 2.5px 5px;*/
+
+      padding-top: 2.5px;
+      padding-bottom: 2.5px;
+      padding-right: 5px;
+      padding-left: 5px;
+
+
+    }
+
+  
+    .keyword{
+      color: green; /*#00FF00;*/
+      /*text-shadow: 0 0 2px white;*/
+    }
+
+    .special-form{
+      color: purple;
+    }
+      /*
+    .symbol{
+      text-shadow: 0 0 3px grey;
+    }
+
+    .string{
+      color: blue;
+    }*/
+
+    /*=======================================
+    Brackets 
+    =======================================*/
+    .opening, .closing {
+      font-size: calc(1 * var(--token-size));
+      opacity: 0.2;
+    }
+
+    .opening{
+      padding: 2.5px 2.5px 2.5px 2.5px;
+    }
+    .closing {
+      padding: 2.5px 2.5px 2.5px 2.5px;
+      /*transform: translate(0px, calc(-0.5 * var(--token-size)));
+      align-self: flex-end;
+    }
+
+    /*=======================================
+    Animations
+    =======================================*/
+
+
+  </style>
+
+
+  <body>
+    <div id="app">
+    </div> <!-- end of app div -->
+    <script src="cljs-out/dev-main.js" type="text/javascript"></script>
+  </body>
+</html>
