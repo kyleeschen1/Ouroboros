@@ -18,6 +18,7 @@
 
 (defn analyze
   [form env]
+  
   (-> (-analyze form env)
       (assoc-id)))
 
