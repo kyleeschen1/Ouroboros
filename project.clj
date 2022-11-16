@@ -18,7 +18,7 @@
                  [cljsjs/waypoints "4.0.1-0"]
                  [borkdude/edamame "0.0.11"]
 
-                 [reagent "1.1.1" ]]
+                 [re-frame "1.3.0"]]
 
   :source-paths ["src"]
 

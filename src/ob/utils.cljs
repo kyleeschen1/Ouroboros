@@ -1,5 +1,7 @@
 
-(ns ^:figwheel-hooks ob.utils)
+(ns ^:figwheel-hooks ob.utils
+  (:require
+   [com.rpl.specter :as s]))
 
 ;;####################################################################
 ;; Constant
@@ -64,6 +66,22 @@
                                     :else form))})
     (->Constant form {:id (gen-id (str "const-" form))})))
 
+(defn add-display-ids
+  [form]
+  (if-not (coll? form)
+
+    form
+    
+    (let [child-ids (mapv (comp :id meta) form)
+         
+          form
+          (assoc-meta form {:child-ids child-ids})
+
+          id (:id (meta form))]
+      
+      (s/setval [s/ALL-WITH-META s/META :parent-id] id form))))
+
+
 (defn walk-ids
   [form]
-  (clojure.walk/postwalk tag-id form))
+  (clojure.walk/postwalk (comp add-display-ids tag-id)  form))

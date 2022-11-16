@@ -9,7 +9,7 @@ goog.require('cljs.core');
  */
 com.rpl.specter.protocols.RichNavigator = function(){};
 
-var com$rpl$specter$protocols$RichNavigator$select_STAR_$dyn_21160 = (function (this$,vals,structure,next_fn){
+var com$rpl$specter$protocols$RichNavigator$select_STAR_$dyn_15227 = (function (this$,vals,structure,next_fn){
 var x__4550__auto__ = (((this$ == null))?null:this$);
 var m__4551__auto__ = (com.rpl.specter.protocols.select_STAR_[goog.typeOf(x__4550__auto__)]);
 if((!((m__4551__auto__ == null)))){
@@ -37,11 +37,11 @@ com.rpl.specter.protocols.select_STAR_ = (function com$rpl$specter$protocols$sel
 if((((!((this$ == null)))) && ((!((this$.com$rpl$specter$protocols$RichNavigator$select_STAR_$arity$4 == null)))))){
 return this$.com$rpl$specter$protocols$RichNavigator$select_STAR_$arity$4(this$,vals,structure,next_fn);
 } else {
-return com$rpl$specter$protocols$RichNavigator$select_STAR_$dyn_21160.call(null,this$,vals,structure,next_fn);
+return com$rpl$specter$protocols$RichNavigator$select_STAR_$dyn_15227.call(null,this$,vals,structure,next_fn);
 }
 });
 
-var com$rpl$specter$protocols$RichNavigator$transform_STAR_$dyn_21161 = (function (this$,vals,structure,next_fn){
+var com$rpl$specter$protocols$RichNavigator$transform_STAR_$dyn_15228 = (function (this$,vals,structure,next_fn){
 var x__4550__auto__ = (((this$ == null))?null:this$);
 var m__4551__auto__ = (com.rpl.specter.protocols.transform_STAR_[goog.typeOf(x__4550__auto__)]);
 if((!((m__4551__auto__ == null)))){
@@ -64,7 +64,7 @@ com.rpl.specter.protocols.transform_STAR_ = (function com$rpl$specter$protocols$
 if((((!((this$ == null)))) && ((!((this$.com$rpl$specter$protocols$RichNavigator$transform_STAR_$arity$4 == null)))))){
 return this$.com$rpl$specter$protocols$RichNavigator$transform_STAR_$arity$4(this$,vals,structure,next_fn);
 } else {
-return com$rpl$specter$protocols$RichNavigator$transform_STAR_$dyn_21161.call(null,this$,vals,structure,next_fn);
+return com$rpl$specter$protocols$RichNavigator$transform_STAR_$dyn_15228.call(null,this$,vals,structure,next_fn);
 }
 });
 
@@ -76,7 +76,7 @@ return com$rpl$specter$protocols$RichNavigator$transform_STAR_$dyn_21161.call(nu
  */
 com.rpl.specter.protocols.Collector = function(){};
 
-var com$rpl$specter$protocols$Collector$collect_val$dyn_21162 = (function (this$,structure){
+var com$rpl$specter$protocols$Collector$collect_val$dyn_15229 = (function (this$,structure){
 var x__4550__auto__ = (((this$ == null))?null:this$);
 var m__4551__auto__ = (com.rpl.specter.protocols.collect_val[goog.typeOf(x__4550__auto__)]);
 if((!((m__4551__auto__ == null)))){
@@ -94,7 +94,7 @@ com.rpl.specter.protocols.collect_val = (function com$rpl$specter$protocols$coll
 if((((!((this$ == null)))) && ((!((this$.com$rpl$specter$protocols$Collector$collect_val$arity$2 == null)))))){
 return this$.com$rpl$specter$protocols$Collector$collect_val$arity$2(this$,structure);
 } else {
-return com$rpl$specter$protocols$Collector$collect_val$dyn_21162.call(null,this$,structure);
+return com$rpl$specter$protocols$Collector$collect_val$dyn_15229.call(null,this$,structure);
 }
 });
 
@@ -104,7 +104,7 @@ return com$rpl$specter$protocols$Collector$collect_val$dyn_21162.call(null,this$
  */
 com.rpl.specter.protocols.ImplicitNav = function(){};
 
-var com$rpl$specter$protocols$ImplicitNav$implicit_nav$dyn_21163 = (function (obj){
+var com$rpl$specter$protocols$ImplicitNav$implicit_nav$dyn_15230 = (function (obj){
 var x__4550__auto__ = (((obj == null))?null:obj);
 var m__4551__auto__ = (com.rpl.specter.protocols.implicit_nav[goog.typeOf(x__4550__auto__)]);
 if((!((m__4551__auto__ == null)))){
@@ -122,7 +122,7 @@ com.rpl.specter.protocols.implicit_nav = (function com$rpl$specter$protocols$imp
 if((((!((obj == null)))) && ((!((obj.com$rpl$specter$protocols$ImplicitNav$implicit_nav$arity$1 == null)))))){
 return obj.com$rpl$specter$protocols$ImplicitNav$implicit_nav$arity$1(obj);
 } else {
-return com$rpl$specter$protocols$ImplicitNav$implicit_nav$dyn_21163.call(null,obj);
+return com$rpl$specter$protocols$ImplicitNav$implicit_nav$dyn_15230.call(null,obj);
 }
 });
 

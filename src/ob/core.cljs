@@ -15,7 +15,12 @@
    [cljsjs.d3]
    [goog.dom :as gdom]
    [reagent.core :as reagent :refer [atom]]
-   [reagent.dom :as rdom]))
+   [reagent.dom :as rdom]
+   
+   [re-frame.core :refer [reg-sub dispatch subscribe]])
+  
+  (:require-macros
+   [com.rpl.specter :refer [defnav comp-paths]]))
 
 
 ;;####################################################################
@@ -361,6 +366,321 @@
      [:br]
     code])
 
+
+;;#######################################################################
+;; Specter Experimentation
+;;#######################################################################
+
+(def nodes
+  {:a {:op :vector :id :a :children [:b :c]}
+   :b {:op :vector :id :b :children [:d]}
+   :c {:op :token :id :c :name "1"}
+   :d {:op :vector :id :d :children [:e :f]}
+   :e {:op :let :id :e :children [:x :y]}
+   :x {:op :token :id :x :name "x"}
+   :y {:op :vector :id :y :children [:z]}
+   :z {:op :token :id :z :name "z"}
+   :f {:op :vector :id :f :children [:h]}
+   :h {:op :token :id :h :name "3"}
+   :g {:op :token :id :g :name "5"}})
+
+
+;;#######################################################################
+;; AST -> DB
+;;#######################################################################
+
+
+
+(defn process-nodes
+  [nodes]
+  (let [mp (atom nodes)]
+    (doseq [[k v] nodes]
+
+      (when (:children v)   
+
+        (let [op-key (str (name k) "-opening")
+              cl-key (str (name k) "-closing")]
+
+          (swap! mp assoc-in [k :opening] op-key)
+          (swap! mp assoc-in [k :closing] cl-key)
+          (swap! mp assoc op-key {:op :opening :id op-key :name "["})
+          (swap! mp assoc cl-key {:op :closing :id cl-key :name "]"}))))
+    @mp))
+
+(defonce nodes*
+  (atom (process-nodes nodes)))
+
+
+(defnav desc [k]
+  (select* [this db next-fn]
+
+           (let [col (volatile! [])]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col conj  (next-fn (k db)))
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                   @col)))
+  
+  (transform* [this db next-fn]
+              
+              (let [col (volatile! db)]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col update k next-fn)
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                  @col))))
+
+(defn get-ast-children
+  [ast]
+  (when-let [ks (:children ast)]
+    (s/select [(s/submap ks) s/MAP-VALS] ast)))
+
+
+(defn add-parens!
+  [mp {:keys [id op]}]
+  (when-let [[opening closing] (case op
+                                 :vector ["[" "]"]
+                                 :list ["(" ")"]
+                                 nil)]
+    (let [op-key (str id "-opening")
+          cl-key (str id "-closing")]
+
+      
+      (swap! mp assoc-in [id :opening] op-key)
+      (swap! mp assoc-in [id :closing] cl-key)
+      (swap! mp assoc op-key {:op :opening :id op-key :name "["})
+      (swap! mp assoc cl-key {:op :closing :id cl-key :name "]"}))))
+
+(defn ast->db
+  
+  ([ast]
+   (ast->db "root"))
+  
+  ([ast parent-id]
+
+  
+   (let [{:keys [id op child-ids]} ast
+
+         data (merge
+
+               {:id (name id)
+                :class [(name op)]
+                }
+               
+               (when child-ids
+                 {:children child-ids})
+
+               (when-let [name (:name ast)]
+                 {:name name}))]
+
+     
+     (swap! nodes* assoc id data)
+     (add-parens! nodes* ast)
+     (when child-ids
+       (doseq [c (get-ast-children ast)]
+
+         (cond
+           (map? c) (ast->db c parent-id)
+           (or (seq? c) (vector? c)) (doseq [cs c]
+                                       (ast->db cs parent-id))))))))
+
+;;#######################################################################
+;; Formating
+;;#######################################################################
+
+(declare render)
+
+(defn render-ids
+
+  ([parent ids]
+   
+   (into parent
+         
+         (for [id ids]
+           
+           ^{:key id} [render id nil])))
+
+  ([parent ids ctx]
+   
+   (conj (render-ids parent (pop ids))
+         
+         [render (peek ids) ctx])))
+
+(defmulti position-hiccup
+  (fn [{:keys [op]} ctx]
+    op))
+
+(defmethod position-hiccup :default
+  
+  [{:keys [id name]} ctx]
+  [:div.token {} (str " " name " ")])
+
+(defmethod position-hiccup :opening
+  
+  [{:keys [id name]} ctx]
+
+  [:div.opening {} (str " " name " ")])
+
+(defmethod position-hiccup :closing
+  
+  [{:keys [id name]} ctx]
+
+  [:div.closing {} (str " " name " ")])
+
+(defn add-cl-paren-to-ctx
+  [ctx cl-paren]
+  (if ctx
+    (conj ctx cl-paren)
+    [cl-paren]))
+
+(defmethod position-hiccup :vector
+  [{:keys [id children opening closing] :as form} ctx]
+  
+  (render-ids [:div.row {} [render opening nil]]
+              children
+              (add-cl-paren-to-ctx ctx closing)))
+
+
+(defmethod position-hiccup :let
+  
+  [{:keys [id children opening closing] :as form} ctx]
+
+  [:div.row {}
+   
+   [render opening nil]
+   
+   (render-ids  [:div.col]
+                children
+                (add-cl-paren-to-ctx ctx closing))])
+
+(s/declarepath TEMP)
+(s/providepath TEMP [s/FIRST s/FIRST])
+
+(def WALK-ALL
+  (s/recursive-path [] p
+                    
+                    (s/if-path coll?
+                               (s/continue-then-stay s/ALL p)
+                               s/STAY)))
+
+
+
+(def AST-WALK
+  (s/cond-path map?
+               s/STAY
+
+               vector?
+               s/ALL
+               
+               s/STAY))
+
+(defnav AST-CHILDREN
+  
+  []
+  
+  (select* [this ast next-fn]
+           
+           (when-let [ks (:children ast)]
+           
+             (let [s (s/select [(s/submap ks) s/MAP-VALS] ast)]
+
+               (s/transform [s/ALL AST-WALK]
+                            next-fn
+                            s))))
+  
+  (transform* [this ast next-fn]
+              
+              (when-let [ks (:children ast)]
+           
+                (s/transform [(s/submap ks) s/MAP-VALS AST-WALK]
+                          next-fn
+                          ast))))
+
+(def AST-PRE-WALK
+  (s/recursive-path [] p
+   (s/if-path (s/pred :children)
+              [(s/stay-then-continue AST-CHILDREN p)]
+              s/STAY)))
+
+(def AST-POST-WALK
+  (s/recursive-path [] p
+   (s/if-path (s/pred :children)
+              [(s/continue-then-stay AST-CHILDREN p)]
+              s/STAY)))
+
+(def AST-DESC AST-POST-WALK)
+
+;;#######################################################################
+;; Rendering
+;;#######################################################################
+
+(defn lastmost-leaf?
+  [node ctx]
+  (not (or (empty? ctx)
+           (:children node))))
+
+(defn apply-ctx
+  [node ctx]
+  
+  (if (lastmost-leaf? node ctx)
+    
+    (render-ids [:div.row node] ctx)
+    
+    node))
+
+(defn add-props
+  
+  [node ast]
+  
+  (let [{:keys [id classes]} ast
+        
+        props* {:id id :class ["jowls"]}]
+
+    (s/transform [1] #(merge % props*) node)))
+
+(defn -render
+  [ast ctx]
+  (-> ast
+      (position-hiccup ctx)
+      (add-props ast)
+      (apply-ctx ctx)))
+
+
+(defn render
+  
+  [id ctx]
+  
+  (reagent/create-class
+   
+   {:component-did-mount (fn [_]
+                           (println (str  "Mounted " id)))
+
+    :component-did-update (fn [this old-argv]
+                            (let [t (rdom/dom-node this)]
+                              
+                              (println (str "\n=========\nUpdated " id))
+                              (println (.-width (.getBoundingClientRect t)))
+                              (println old-argv)))
+
+    
+    :reagent-render
+    (fn [id ctx]
+      (let [form @(reagent/cursor nodes* [id])]
+        [-render form ctx]))}))
+
+
 (defn main-page
   
   [state]
@@ -376,7 +696,8 @@
              :padding "0px 20px"})
     
     [:h1 "Ouroboros"]
-    [text-col state]]
+    [text-col state]
+    [render :a nil]]
 
    [:div ($ {:width "70%"
              :flex-direction "row"
@@ -510,3 +831,4 @@
                    ;;:position "absolute"
                    :color "red"}}
      "Jowls"]]
+

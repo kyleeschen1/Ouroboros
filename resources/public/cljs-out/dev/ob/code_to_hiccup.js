@@ -4,8 +4,8 @@ goog.require('cljs.core');
 
 
 ob.code_to_hiccup.code__GT_hiccup = (function ob$code_to_hiccup$code__GT_hiccup(var_args){
-var G__48825 = arguments.length;
-switch (G__48825) {
+var G__25436 = arguments.length;
+switch (G__25436) {
 case 1:
 return ob.code_to_hiccup.code__GT_hiccup.cljs$core$IFn$_invoke$arity$1((arguments[(0)]));
 
@@ -29,38 +29,38 @@ var temp__5718__auto__ = new cljs.core.Keyword(null,"children","children",-94056
 if(cljs.core.truth_(temp__5718__auto__)){
 var child_keys = temp__5718__auto__;
 var children = ob.code_to_hiccup.ast__GT_flat_child_vector.call(null,form,child_keys);
-var vec__48826 = ob.code_to_hiccup.get_enclosings.call(null,form);
-var op = cljs.core.nth.call(null,vec__48826,(0),null);
-var cl = cljs.core.nth.call(null,vec__48826,(1),null);
-var G__48832 = children;
-var vec__48833 = G__48832;
-var seq__48834 = cljs.core.seq.call(null,vec__48833);
-var first__48835 = cljs.core.first.call(null,seq__48834);
-var seq__48834__$1 = cljs.core.next.call(null,seq__48834);
-var c = first__48835;
-var cs = seq__48834__$1;
+var vec__25437 = ob.code_to_hiccup.get_enclosings.call(null,form);
+var op = cljs.core.nth.call(null,vec__25437,(0),null);
+var cl = cljs.core.nth.call(null,vec__25437,(1),null);
+var G__25443 = children;
+var vec__25444 = G__25443;
+var seq__25445 = cljs.core.seq.call(null,vec__25444);
+var first__25446 = cljs.core.first.call(null,seq__25445);
+var seq__25445__$1 = cljs.core.next.call(null,seq__25445);
+var c = first__25446;
+var cs = seq__25445__$1;
 var acc = new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [op], null);
-var G__48832__$1 = G__48832;
+var G__25443__$1 = G__25443;
 var acc__$1 = acc;
 while(true){
-var vec__48839 = G__48832__$1;
-var seq__48840 = cljs.core.seq.call(null,vec__48839);
-var first__48841 = cljs.core.first.call(null,seq__48840);
-var seq__48840__$1 = cljs.core.next.call(null,seq__48840);
-var c__$1 = first__48841;
-var cs__$1 = seq__48840__$1;
+var vec__25450 = G__25443__$1;
+var seq__25451 = cljs.core.seq.call(null,vec__25450);
+var first__25452 = cljs.core.first.call(null,seq__25451);
+var seq__25451__$1 = cljs.core.next.call(null,seq__25451);
+var c__$1 = first__25452;
+var cs__$1 = seq__25451__$1;
 var acc__$2 = acc__$1;
 if(cljs.core.seq.call(null,cs__$1)){
-var G__48843 = cs__$1;
-var G__48844 = cljs.core.conj.call(null,acc__$2,ob.code_to_hiccup.code__GT_hiccup.call(null,c__$1));
-G__48832__$1 = G__48843;
-acc__$1 = G__48844;
+var G__25454 = cs__$1;
+var G__25455 = cljs.core.conj.call(null,acc__$2,ob.code_to_hiccup.code__GT_hiccup.call(null,c__$1));
+G__25443__$1 = G__25454;
+acc__$1 = G__25455;
 continue;
 } else {
-return ob.code_to_hiccup.format_html.call(null,form,cljs.core.conj.call(null,acc__$2,ob.code_to_hiccup.code__GT_hiccup.call(null,c__$1,((function (G__48832__$1,acc__$1,vec__48839,seq__48840,first__48841,seq__48840__$1,c__$1,cs__$1,acc__$2,G__48832,vec__48833,seq__48834,first__48835,seq__48834__$1,c,cs,acc,children,vec__48826,op,cl,child_keys,temp__5718__auto__){
+return ob.code_to_hiccup.format_html.call(null,form,cljs.core.conj.call(null,acc__$2,ob.code_to_hiccup.code__GT_hiccup.call(null,c__$1,((function (G__25443__$1,acc__$1,vec__25450,seq__25451,first__25452,seq__25451__$1,c__$1,cs__$1,acc__$2,G__25443,vec__25444,seq__25445,first__25446,seq__25445__$1,c,cs,acc,children,vec__25437,op,cl,child_keys,temp__5718__auto__){
 return (function (form__$1){
 return k.call(null,new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),form__$1,cl], null));
-});})(G__48832__$1,acc__$1,vec__48839,seq__48840,first__48841,seq__48840__$1,c__$1,cs__$1,acc__$2,G__48832,vec__48833,seq__48834,first__48835,seq__48834__$1,c,cs,acc,children,vec__48826,op,cl,child_keys,temp__5718__auto__))
+});})(G__25443__$1,acc__$1,vec__25450,seq__25451,first__25452,seq__25451__$1,c__$1,cs__$1,acc__$2,G__25443,vec__25444,seq__25445,first__25446,seq__25445__$1,c,cs,acc,children,vec__25437,op,cl,child_keys,temp__5718__auto__))
 )));
 }
 break;
@@ -72,14 +72,14 @@ return k.call(null,ob.code_to_hiccup.format_html.call(null,form,null));
 
 (ob.code_to_hiccup.code__GT_hiccup.cljs$lang$maxFixedArity = 2);
 
-ob.code_to_hiccup.get_enclosings = (function ob$code_to_hiccup$get_enclosings(p__48845){
-var map__48846 = p__48845;
-var map__48846__$1 = cljs.core.__destructure_map.call(null,map__48846);
-var op = cljs.core.get.call(null,map__48846__$1,new cljs.core.Keyword(null,"op","op",-1882987955));
-var id = cljs.core.get.call(null,map__48846__$1,new cljs.core.Keyword(null,"id","id",-1388402092));
-var vec__48847 = (function (){var G__48850 = op;
-var G__48850__$1 = (((G__48850 instanceof cljs.core.Keyword))?G__48850.fqn:null);
-switch (G__48850__$1) {
+ob.code_to_hiccup.get_enclosings = (function ob$code_to_hiccup$get_enclosings(p__25456){
+var map__25457 = p__25456;
+var map__25457__$1 = cljs.core.__destructure_map.call(null,map__25457);
+var op = cljs.core.get.call(null,map__25457__$1,new cljs.core.Keyword(null,"op","op",-1882987955));
+var id = cljs.core.get.call(null,map__25457__$1,new cljs.core.Keyword(null,"id","id",-1388402092));
+var vec__25458 = (function (){var G__25461 = op;
+var G__25461__$1 = (((G__25461 instanceof cljs.core.Keyword))?G__25461.fqn:null);
+switch (G__25461__$1) {
 case "vector":
 return new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, ["[","]"], null);
 
@@ -105,8 +105,8 @@ return null;
 
 }
 })();
-var op__$1 = cljs.core.nth.call(null,vec__48847,(0),null);
-var cl = cljs.core.nth.call(null,vec__48847,(1),null);
+var op__$1 = cljs.core.nth.call(null,vec__25458,(0),null);
+var cl = cljs.core.nth.call(null,vec__25458,(1),null);
 var gen_div = (function (prefix,string){
 var paren_id = [cljs.core.str.cljs$core$IFn$_invoke$arity$1(prefix),"-",cljs.core.str.cljs$core$IFn$_invoke$arity$1(id)].join('');
 var paren_cls = ["bracket-",cljs.core.str.cljs$core$IFn$_invoke$arity$1(id)].join('');
@@ -129,40 +129,40 @@ return null;
  *   maps).
  */
 ob.code_to_hiccup.ast__GT_flat_child_vector = (function ob$code_to_hiccup$ast__GT_flat_child_vector(ast,child_keys){
-var G__48855 = cljs.core.apply.call(null,cljs.core.juxt,child_keys).call(null,ast);
-var vec__48856 = G__48855;
-var seq__48857 = cljs.core.seq.call(null,vec__48856);
-var first__48858 = cljs.core.first.call(null,seq__48857);
-var seq__48857__$1 = cljs.core.next.call(null,seq__48857);
-var c = first__48858;
-var cs = seq__48857__$1;
-var children = vec__48856;
+var G__25466 = cljs.core.apply.call(null,cljs.core.juxt,child_keys).call(null,ast);
+var vec__25467 = G__25466;
+var seq__25468 = cljs.core.seq.call(null,vec__25467);
+var first__25469 = cljs.core.first.call(null,seq__25468);
+var seq__25468__$1 = cljs.core.next.call(null,seq__25468);
+var c = first__25469;
+var cs = seq__25468__$1;
+var children = vec__25467;
 var acc = cljs.core.PersistentVector.EMPTY;
-var G__48855__$1 = G__48855;
+var G__25466__$1 = G__25466;
 var acc__$1 = acc;
 while(true){
-var vec__48862 = G__48855__$1;
-var seq__48863 = cljs.core.seq.call(null,vec__48862);
-var first__48864 = cljs.core.first.call(null,seq__48863);
-var seq__48863__$1 = cljs.core.next.call(null,seq__48863);
-var c__$1 = first__48864;
-var cs__$1 = seq__48863__$1;
-var children__$1 = vec__48862;
+var vec__25473 = G__25466__$1;
+var seq__25474 = cljs.core.seq.call(null,vec__25473);
+var first__25475 = cljs.core.first.call(null,seq__25474);
+var seq__25474__$1 = cljs.core.next.call(null,seq__25474);
+var c__$1 = first__25475;
+var cs__$1 = seq__25474__$1;
+var children__$1 = vec__25473;
 var acc__$2 = acc__$1;
 if(cljs.core.not.call(null,cljs.core.seq.call(null,children__$1))){
 return acc__$2;
 } else {
 if(cljs.core.seq_QMARK_.call(null,c__$1)){
-var G__48865 = cs__$1;
-var G__48866 = cljs.core.into.call(null,acc__$2,c__$1);
-G__48855__$1 = G__48865;
-acc__$1 = G__48866;
+var G__25476 = cs__$1;
+var G__25477 = cljs.core.into.call(null,acc__$2,c__$1);
+G__25466__$1 = G__25476;
+acc__$1 = G__25477;
 continue;
 } else {
-var G__48867 = cs__$1;
-var G__48868 = cljs.core.conj.call(null,acc__$2,c__$1);
-G__48855__$1 = G__48867;
-acc__$1 = G__48868;
+var G__25478 = cs__$1;
+var G__25479 = cljs.core.conj.call(null,acc__$2,c__$1);
+G__25466__$1 = G__25478;
+acc__$1 = G__25479;
 continue;
 }
 }
@@ -186,27 +186,27 @@ var prefer_table__4748__auto__ = cljs.core.atom.call(null,cljs.core.PersistentAr
 var method_cache__4749__auto__ = cljs.core.atom.call(null,cljs.core.PersistentArrayMap.EMPTY);
 var cached_hierarchy__4750__auto__ = cljs.core.atom.call(null,cljs.core.PersistentArrayMap.EMPTY);
 var hierarchy__4751__auto__ = cljs.core.get.call(null,cljs.core.PersistentArrayMap.EMPTY,new cljs.core.Keyword(null,"hierarchy","hierarchy",-1053470341),cljs.core.get_global_hierarchy.call(null));
-return (new cljs.core.MultiFn(cljs.core.symbol.call(null,"ob.code-to-hiccup","-format-html"),(function (p__48869,_){
-var map__48870 = p__48869;
-var map__48870__$1 = cljs.core.__destructure_map.call(null,map__48870);
-var op = cljs.core.get.call(null,map__48870__$1,new cljs.core.Keyword(null,"op","op",-1882987955));
+return (new cljs.core.MultiFn(cljs.core.symbol.call(null,"ob.code-to-hiccup","-format-html"),(function (p__25480,_){
+var map__25481 = p__25480;
+var map__25481__$1 = cljs.core.__destructure_map.call(null,map__25481);
+var op = cljs.core.get.call(null,map__25481__$1,new cljs.core.Keyword(null,"op","op",-1882987955));
 return op;
 }),new cljs.core.Keyword(null,"default","default",-1987822328),hierarchy__4751__auto__,method_table__4747__auto__,prefer_table__4748__auto__,method_cache__4749__auto__,cached_hierarchy__4750__auto__));
 })();
 }
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"tag","tag",-1290361223),(function (p__48871,args){
-var map__48872 = p__48871;
-var map__48872__$1 = cljs.core.__destructure_map.call(null,map__48872);
-var tag = cljs.core.get.call(null,map__48872__$1,new cljs.core.Keyword(null,"tag","tag",-1290361223));
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"tag","tag",-1290361223),(function (p__25482,args){
+var map__25483 = p__25482;
+var map__25483__$1 = cljs.core.__destructure_map.call(null,map__25483);
+var tag = cljs.core.get.call(null,map__25483__$1,new cljs.core.Keyword(null,"tag","tag",-1290361223));
 return cljs.core.into.call(null,new cljs.core.PersistentVector(null, 2, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div","div",1057191632),new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"id","id",-1388402092),cljs.core.str.cljs$core$IFn$_invoke$arity$1(tag)], null)], null),args);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"default","default",-1987822328),(function (ast,p__48873){
-var vec__48874 = p__48873;
-var seq__48875 = cljs.core.seq.call(null,vec__48874);
-var first__48876 = cljs.core.first.call(null,seq__48875);
-var seq__48875__$1 = cljs.core.next.call(null,seq__48875);
-var op_paren = first__48876;
-var acc = seq__48875__$1;
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"default","default",-1987822328),(function (ast,p__25484){
+var vec__25485 = p__25484;
+var seq__25486 = cljs.core.seq.call(null,vec__25485);
+var first__25487 = cljs.core.first.call(null,seq__25486);
+var seq__25486__$1 = cljs.core.next.call(null,seq__25486);
+var op_paren = first__25487;
+var acc = seq__25486__$1;
 return cljs.core.into.call(null,new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren], null),acc);
 }));
 cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"constant","constant",-379609303),(function (ast,_){
@@ -219,61 +219,61 @@ return new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMP
 cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"special-form","special-form",-1326536374),(function (ast,_){
 return new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.token","div.token",-1455309558),new cljs.core.PersistentArrayMap(null, 1, [new cljs.core.Keyword(null,"class","class",-2030961996),"special-form"], null),new cljs.core.Keyword(null,"name","name",1843675177).cljs$core$IFn$_invoke$arity$1(ast)], null);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"map","map",1371690461),(function (ast,p__48877){
-var vec__48878 = p__48877;
-var seq__48879 = cljs.core.seq.call(null,vec__48878);
-var first__48880 = cljs.core.first.call(null,seq__48879);
-var seq__48879__$1 = cljs.core.next.call(null,seq__48879);
-var op_paren = first__48880;
-var acc = seq__48879__$1;
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"map","map",1371690461),(function (ast,p__25488){
+var vec__25489 = p__25488;
+var seq__25490 = cljs.core.seq.call(null,vec__25489);
+var first__25491 = cljs.core.first.call(null,seq__25490);
+var seq__25490__$1 = cljs.core.next.call(null,seq__25490);
+var op_paren = first__25491;
+var acc = seq__25490__$1;
 return new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,cljs.core.into.call(null,new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011)], null),acc)], null);
 }));
 cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"map-entry","map-entry",-1310914056),(function (ast,acc){
 return cljs.core.into.call(null,new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515)], null),acc);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"if","if",-458814265),(function (ast,p__48881){
-var vec__48882 = p__48881;
-var op_paren = cljs.core.nth.call(null,vec__48882,(0),null);
-var operator = cljs.core.nth.call(null,vec__48882,(1),null);
-var pred = cljs.core.nth.call(null,vec__48882,(2),null);
-var else$ = cljs.core.nth.call(null,vec__48882,(3),null);
-var then = cljs.core.nth.call(null,vec__48882,(4),null);
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"if","if",-458814265),(function (ast,p__25492){
+var vec__25493 = p__25492;
+var op_paren = cljs.core.nth.call(null,vec__25493,(0),null);
+var operator = cljs.core.nth.call(null,vec__25493,(1),null);
+var pred = cljs.core.nth.call(null,vec__25493,(2),null);
+var else$ = cljs.core.nth.call(null,vec__25493,(3),null);
+var then = cljs.core.nth.call(null,vec__25493,(4),null);
 return new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011),new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),operator,pred], null),new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.indent","div.indent",-1749025025)], null),else$], null),new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.indent","div.indent",-1749025025)], null),then], null)], null)], null);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"do","do",46310725),(function (ast,p__48885){
-var vec__48886 = p__48885;
-var seq__48887 = cljs.core.seq.call(null,vec__48886);
-var first__48888 = cljs.core.first.call(null,seq__48887);
-var seq__48887__$1 = cljs.core.next.call(null,seq__48887);
-var op_paren = first__48888;
-var first__48888__$1 = cljs.core.first.call(null,seq__48887__$1);
-var seq__48887__$2 = cljs.core.next.call(null,seq__48887__$1);
-var op = first__48888__$1;
-var statements = seq__48887__$2;
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"do","do",46310725),(function (ast,p__25496){
+var vec__25497 = p__25496;
+var seq__25498 = cljs.core.seq.call(null,vec__25497);
+var first__25499 = cljs.core.first.call(null,seq__25498);
+var seq__25498__$1 = cljs.core.next.call(null,seq__25498);
+var op_paren = first__25499;
+var first__25499__$1 = cljs.core.first.call(null,seq__25498__$1);
+var seq__25498__$2 = cljs.core.next.call(null,seq__25498__$1);
+var op = first__25499__$1;
+var statements = seq__25498__$2;
 return new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011),op,new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.indent","div.indent",-1749025025)], null),cljs.core.into.call(null,new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011)], null),statements)], null)], null)], null);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"quote","quote",-262615245),(function (ast,p__48889){
-var vec__48890 = p__48889;
-var op_paren = cljs.core.nth.call(null,vec__48890,(0),null);
-var op = cljs.core.nth.call(null,vec__48890,(1),null);
-var arg = cljs.core.nth.call(null,vec__48890,(2),null);
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"quote","quote",-262615245),(function (ast,p__25500){
+var vec__25501 = p__25500;
+var op_paren = cljs.core.nth.call(null,vec__25501,(0),null);
+var op = cljs.core.nth.call(null,vec__25501,(1),null);
+var arg = cljs.core.nth.call(null,vec__25501,(2),null);
 return new cljs.core.PersistentVector(null, 5, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,op,arg], null);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"binding-vector","binding-vector",466058868),(function (ast,p__48893){
-var vec__48894 = p__48893;
-var seq__48895 = cljs.core.seq.call(null,vec__48894);
-var first__48896 = cljs.core.first.call(null,seq__48895);
-var seq__48895__$1 = cljs.core.next.call(null,seq__48895);
-var op_paren = first__48896;
-var acc = seq__48895__$1;
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"binding-vector","binding-vector",466058868),(function (ast,p__25504){
+var vec__25505 = p__25504;
+var seq__25506 = cljs.core.seq.call(null,vec__25505);
+var first__25507 = cljs.core.first.call(null,seq__25506);
+var seq__25506__$1 = cljs.core.next.call(null,seq__25506);
+var op_paren = first__25507;
+var acc = seq__25506__$1;
 return new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,cljs.core.into.call(null,new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011)], null),acc)], null);
 }));
-cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"let","let",-1282412701),(function (ast,p__48897){
-var vec__48898 = p__48897;
-var op_paren = cljs.core.nth.call(null,vec__48898,(0),null);
-var operator = cljs.core.nth.call(null,vec__48898,(1),null);
-var bindings = cljs.core.nth.call(null,vec__48898,(2),null);
-var body = cljs.core.nth.call(null,vec__48898,(3),null);
+cljs.core._add_method.call(null,ob.code_to_hiccup._format_html,new cljs.core.Keyword(null,"let","let",-1282412701),(function (ast,p__25508){
+var vec__25509 = p__25508;
+var op_paren = cljs.core.nth.call(null,vec__25509,(0),null);
+var operator = cljs.core.nth.call(null,vec__25509,(1),null);
+var bindings = cljs.core.nth.call(null,vec__25509,(2),null);
+var body = cljs.core.nth.call(null,vec__25509,(3),null);
 return new cljs.core.PersistentVector(null, 4, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),cljs.core.PersistentArrayMap.EMPTY,op_paren,new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.col","div.col",-1800797011),new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),operator,bindings], null),new cljs.core.PersistentVector(null, 3, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.row","div.row",133678515),new cljs.core.PersistentVector(null, 1, 5, cljs.core.PersistentVector.EMPTY_NODE, [new cljs.core.Keyword(null,"div.indent","div.indent",-1749025025)], null),body], null)], null)], null);
 }));
 

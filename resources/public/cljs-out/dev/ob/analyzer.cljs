@@ -18,13 +18,12 @@
 
 (defn analyze
   [form env]
-  
   (-> (-analyze form env)
       (assoc-id)))
 
 (defn map-analyze
   [form env]
-  (map (fn [node]
+  (mapv (fn [node]
          (analyze node env))
        form))
 
@@ -42,9 +41,10 @@
   
   [ast]
   
-  (let [id (:id (meta (:form ast)))]
+  (let [form (:form ast)
+        {:keys [id child-ids parent-id]}  (meta form)]
     
-    (assoc ast :id id)))
+    (assoc ast :id id :child-ids child-ids :parent-id parent-id)))
 
 ;;------------------------------------
 ;; Protocol Implementation
@@ -75,13 +75,24 @@
 
   cljs.core/List
   (-analyze [form env]
-    {:op (if (= 'tag (first form))
+    #_{:op (if (= 'tag (first form))
            :tagged-list
            :list)
      :form form
      :children [:elements]
-     :elements (analyze-sexpr form env)})
+     :elements (analyze-sexpr form env)}
+    (analyze-sexpr form env))
 
+  cljs.core/LazySeq
+  (-analyze [form env]
+    #_{:op (if (= 'tag (first form))
+           :tagged-list
+           :list)
+     :form form
+     :children [:elements]
+     :elements (analyze-sexpr form env)}
+    (analyze-sexpr form env))
+  
   cljs.core/PersistentHashSet
   (-analyze [form env]
     {:op :set
@@ -179,15 +190,17 @@
   (let [analyze-pair (fn [form]
                        (let [sym (first form)
                              val (second form)]
-                         {:op :binding-pair
-                          :form form
-                          :children [:sym :val]
-                          :sym (analyze sym env)
-                          :val (analyze val env)}))
+
+                         (assoc-id
+                          {:op :binding-pair
+                           :form form
+                           :children [:sym :val]
+                           :sym (analyze sym env)
+                           :val (analyze val env)})))
 
         bindings (->> bv
                       (partition 2)
-                      (map analyze-pair))]
+                      (mapv analyze-pair))]
 
     (assoc-id
      {:op :binding-vector
@@ -219,5 +232,7 @@
 
 (defn analyze-sf
   [operator]
-  {:op :special-form
-   :name (name operator)})
+  (assoc-id
+   {:op :special-form
+    :form operator
+    :name (name operator)}))
