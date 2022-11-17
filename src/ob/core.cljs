@@ -350,220 +350,19 @@
 
 #_(-> (js/d3.select "#yo") (.node) (.append (.node jowls)))
 
-(defn code-col
-  [_]
-  [:div ($ {:flex-direction "column"
-            :height "500px"
-            :padding "30px"
-            :overflow "scroll"
-            :border "solid 2px black"})
-     
-     code
-     [:br]
-     [:br]
-     code
-     [:br]
-     [:br]
-    code])
+
 
 
 ;;#######################################################################
 ;; Specter Experimentation
-;;#######################################################################
+;;######################################################################
 
-(def nodes
-  {:a {:op :vector :id :a :children [:b :c]}
-   :b {:op :vector :id :b :children [:d]}
-   :c {:op :token :id :c :name "1"}
-   :d {:op :vector :id :d :children [:e :f]}
-   :e {:op :let :id :e :children [:x :y]}
-   :x {:op :token :id :x :name "x"}
-   :y {:op :vector :id :y :children [:z]}
-   :z {:op :token :id :z :name "z"}
-   :f {:op :vector :id :f :children [:h]}
-   :h {:op :token :id :h :name "3"}
-   :g {:op :token :id :g :name "5"}})
+
 
 
 ;;#######################################################################
-;; AST -> DB
+;; AST Navigators
 ;;#######################################################################
-
-
-
-(defn process-nodes
-  [nodes]
-  (let [mp (atom nodes)]
-    (doseq [[k v] nodes]
-
-      (when (:children v)   
-
-        (let [op-key (str (name k) "-opening")
-              cl-key (str (name k) "-closing")]
-
-          (swap! mp assoc-in [k :opening] op-key)
-          (swap! mp assoc-in [k :closing] cl-key)
-          (swap! mp assoc op-key {:op :opening :id op-key :name "["})
-          (swap! mp assoc cl-key {:op :closing :id cl-key :name "]"}))))
-    @mp))
-
-(defonce nodes*
-  (atom (process-nodes nodes)))
-
-
-(defnav desc [k]
-  (select* [this db next-fn]
-
-           (let [col (volatile! [])]
-
-                (letfn [(gather [k]
-                          
-                          (vswap! col conj  (next-fn (k db)))
-                          
-                          (doseq [c (get-in db [k :children])]
-                            
-                            (gather c)))]
-
-                  (gather k)
-                   @col)))
-  
-  (transform* [this db next-fn]
-              
-              (let [col (volatile! db)]
-
-                (letfn [(gather [k]
-                          
-                          (vswap! col update k next-fn)
-                          
-                          (doseq [c (get-in db [k :children])]
-                            
-                            (gather c)))]
-
-                  (gather k)
-                  @col))))
-
-(defn get-ast-children
-  [ast]
-  (when-let [ks (:children ast)]
-    (s/select [(s/submap ks) s/MAP-VALS] ast)))
-
-
-(defn add-parens!
-  [mp {:keys [id op]}]
-  (when-let [[opening closing] (case op
-                                 :vector ["[" "]"]
-                                 :list ["(" ")"]
-                                 nil)]
-    (let [op-key (str id "-opening")
-          cl-key (str id "-closing")]
-
-      
-      (swap! mp assoc-in [id :opening] op-key)
-      (swap! mp assoc-in [id :closing] cl-key)
-      (swap! mp assoc op-key {:op :opening :id op-key :name "["})
-      (swap! mp assoc cl-key {:op :closing :id cl-key :name "]"}))))
-
-(defn ast->db
-  
-  ([ast]
-   (ast->db "root"))
-  
-  ([ast parent-id]
-
-  
-   (let [{:keys [id op child-ids]} ast
-
-         data (merge
-
-               {:id (name id)
-                :class [(name op)]
-                }
-               
-               (when child-ids
-                 {:children child-ids})
-
-               (when-let [name (:name ast)]
-                 {:name name}))]
-
-     
-     (swap! nodes* assoc id data)
-     (add-parens! nodes* ast)
-     (when child-ids
-       (doseq [c (get-ast-children ast)]
-
-         (cond
-           (map? c) (ast->db c parent-id)
-           (or (seq? c) (vector? c)) (doseq [cs c]
-                                       (ast->db cs parent-id))))))))
-
-;;#######################################################################
-;; Formating
-;;#######################################################################
-
-(declare render)
-
-(defn render-ids
-
-  ([parent ids]
-   
-   (into parent
-         
-         (for [id ids]
-           
-           ^{:key id} [render id nil])))
-
-  ([parent ids ctx]
-   
-   (conj (render-ids parent (pop ids))
-         
-         [render (peek ids) ctx])))
-
-(defmulti position-hiccup
-  (fn [{:keys [op]} ctx]
-    op))
-
-(defmethod position-hiccup :default
-  
-  [{:keys [id name]} ctx]
-  [:div.token {} (str " " name " ")])
-
-(defmethod position-hiccup :opening
-  
-  [{:keys [id name]} ctx]
-
-  [:div.opening {} (str " " name " ")])
-
-(defmethod position-hiccup :closing
-  
-  [{:keys [id name]} ctx]
-
-  [:div.closing {} (str " " name " ")])
-
-(defn add-cl-paren-to-ctx
-  [ctx cl-paren]
-  (if ctx
-    (conj ctx cl-paren)
-    [cl-paren]))
-
-(defmethod position-hiccup :vector
-  [{:keys [id children opening closing] :as form} ctx]
-  
-  (render-ids [:div.row {} [render opening nil]]
-              children
-              (add-cl-paren-to-ctx ctx closing)))
-
-
-(defmethod position-hiccup :let
-  
-  [{:keys [id children opening closing] :as form} ctx]
-
-  [:div.row {}
-   
-   [render opening nil]
-   
-   (render-ids  [:div.col]
-                children
-                (add-cl-paren-to-ctx ctx closing))])
 
 (s/declarepath TEMP)
 (s/providepath TEMP [s/FIRST s/FIRST])
@@ -623,40 +422,312 @@
 (def AST-DESC AST-POST-WALK)
 
 ;;#######################################################################
+;; AST -> DB
+;;#######################################################################
+
+
+
+
+
+
+
+(defnav desc [k]
+  (select* [this db next-fn]
+
+           (let [col (volatile! [])]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col conj  (next-fn (k db)))
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                   @col)))
+  
+  (transform* [this db next-fn]
+              
+              (let [col (volatile! db)]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col update k next-fn)
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                  @col))))
+
+
+
+(defn paren->db
+  
+  [parent-id text tag]
+  
+  (let [id (keyword (str parent-id "-" tag))]
+    
+    {id {:op :syntax
+         :id id
+         :class ["bracket" tag (str parent-id "-bracket" )]
+         :name text}}))
+
+(defn ast->db
+  
+  ([ast]
+   (ast->db ast :root))
+
+  ([ast id]
+   
+   (let [sel (s/select [AST-DESC #(:id %)] ast)]
+     
+     (for [{:keys [id op name parens parent-id child-ids]} sel]
+
+
+       (let [[paren-ids parens] (when-let [[op cl] parens]
+                                  
+                                  (let [op-paren (paren->db id op "opening")
+                                        cl-paren (paren->db id cl "closing")
+                                        
+                                        parens (merge op-paren cl-paren)
+
+                                        ids (s/select [s/MAP-KEYS] parens)]
+
+                                    [ids parens]))]
+
+         (merge
+          
+          {id (merge {:id id
+                      :op op
+                      :class [op]
+                      :name name
+                      :parent-id parent-id
+                      :children child-ids}
+
+                     (when paren-ids
+                       {:parens paren-ids}))}
+
+          (when parens
+            parens)))))))
+
+(defn temp
+  [db]
+  (let [ast (walk-ids '(let [x 1
+                             z (let [t (let [e r]
+                                         (let [x {:a b :c 3}]
+                                           (fn [x y]
+                                             (if true
+                                               3
+                                               (+ 1 2)))))]
+                                 (do
+                                   3
+                                   4
+                                   5)) ] y))
+        data (ast->db (analyze ast {}))
+        id  (:id (meta ast))]
+   data
+   (s/transform [:root :children] (fn [c] (conj c id) ) (apply merge db data))))
+
+;;#######################################################################
+;; Formating
+;;#######################################################################
+
+(declare render)
+
+(defn render-ids
+
+  ([parent ids]
+   
+   (into parent
+         
+         (for [id ids]
+           
+           ^{:key id} [render id nil])))
+
+  ([parent ids ctx]
+   
+   (conj (render-ids parent (pop ids))
+         
+         [render (peek ids) ctx])))
+
+(defn render-grid
+  
+  [outer-el inner-el ids ctx]
+    
+  (conj (into outer-el
+
+              (for [id (pop ids)]
+                
+                ^{:key l} (render-ids inner-el id)))
+
+        (render-ids inner-el (peek ids) ctx)))
+
+
+(defmulti position-children
+  (fn [{:keys [op]} ctx]
+    op))
+
+(defmethod position-children :default
+  
+  [{:keys [id name]} ctx]
+  [:div.token {} (str " " name " ")])
+
+(defmethod position-children :root
+  
+  [{:keys [id children]} ctx]
+ 
+  (into [:div.root {}]
+        
+        (for [c children]
+          
+          ^{:key c} [render c nil])))
+
+(defmethod position-children :default
+  
+  [{:keys [id children parens] :as form} ctx]
+ 
+  (render-ids [:div.row] children ctx))
+
+(defn col-of-pairs
+  
+  [children ctx]
+  
+  (render-grid [:div.col]
+
+               [:div.row]
+
+               (mapv vec (partition 2 children)) 
+               
+               ctx))
+
+(defmethod position-children :map
+  
+  [{:keys [children] :as form} ctx]
+  
+  (col-of-pairs children ctx))
+
+
+(defmethod position-children :fn
+  
+  [{:keys [children] :as form} ctx]
+
+  (let [[op params body] children]
+
+    [:div.col
+     [:div.row [render op nil] [render params nil]]
+     [render body ctx]]))
+
+(defmethod position-children :if
+  
+  [{:keys [children] :as form} ctx]
+
+  (let [[op pred & args] children]
+
+    [:div.col
+     
+     [:div.row [render op nil] [render pred nil]]
+     
+     [:div.row
+      
+      [:div.indent] (render-ids  [:div.col] (vec args) ctx)]]))
+
+(defmethod position-children :do
+  
+  [{:keys [children] :as form} ctx]
+
+  (let [[op & args] children]
+
+    [:div.col [render op nil]
+
+     [:div.row
+      
+      [:div.indent] (render-ids  [:div.col] (vec args) ctx)]]))
+
+(defmethod position-children :binding-vector
+  
+  [{:keys [children] :as form} ctx]
+
+  (col-of-pairs children ctx))
+
+(defmethod position-children :let
+  
+  [{:keys [children] :as form} ctx]
+
+  (let [[op bindings body] children]
+
+    [:div.col
+     
+     [:div.row [render op nil] [render bindings nil]]
+     
+     [:div.row [:div.indent] [render body ctx]]]))
+
+;;#######################################################################
 ;; Rendering
 ;;#######################################################################
 
-(defn lastmost-leaf?
-  [node ctx]
-  (not (or (empty? ctx)
-           (:children node))))
 
-(defn apply-ctx
-  [node ctx]
+
+(defn position-parens
   
-  (if (lastmost-leaf? node ctx)
+  [node ast ctx]
+  
+  (if-let [[op-paren cl-paren] (:parens ast)]
+
+    (let [ctx (if ctx
+                (conj ctx cl-paren)
+                [cl-paren])
+
+          op-paren [render op-paren nil]]
+
+      [(conj node op-paren) ctx])
     
-    (render-ids [:div.row node] ctx)
+    [node ctx]))
+
+(defn format-coll-body
+  
+  [node ast ctx]
+  
+  (let [[node ctx] (position-parens node ast ctx)
+
+        node-body (position-children ast ctx)]
+
+       (conj node node-body)))
+
+(defn format-token-body
+  
+  [node {:keys [name]} ctx]
+  
+  (let [trailing-parens (when ctx
+                          (->> ctx
+                               (reverse)
+                               (map (fn [node] [render node nil]))))]
     
-    node))
-
-(defn add-props
-  
-  [node ast]
-  
-  (let [{:keys [id classes]} ast
-        
-        props* {:id id :class ["jowls"]}]
-
-    (s/transform [1] #(merge % props*) node)))
+    (into [:div.row (conj node name)] trailing-parens)))
 
 (defn -render
+  
   [ast ctx]
-  (-> ast
-      (position-hiccup ctx)
-      (add-props ast)
-      (apply-ctx ctx)))
 
+  (let [{:keys [id class name style]} ast
+        
+        props* {:id id
+                :style style
+                :class (conj class (when-not (:children ast)
+                                       "token"))}
+
+        node [:div.row props*]]
+
+    (if (:children ast)
+      
+      (format-coll-body node ast ctx)
+      
+      (format-token-body node ast ctx))))
+
+(defonce db
+  (atom {}))
 
 (defn render
   
@@ -665,21 +736,95 @@
   (reagent/create-class
    
    {:component-did-mount (fn [_]
-                           (println (str  "Mounted " id)))
+                           #_(println (str  "Mounted " id)))
 
     :component-did-update (fn [this old-argv]
                             (let [t (rdom/dom-node this)]
                               
                               (println (str "\n=========\nUpdated " id))
-                              (println (.-width (.getBoundingClientRect t)))
-                              (println old-argv)))
+                              #_(println (.-width (.getBoundingClientRect t)))
+                              #_(println old-argv)))
 
     
     :reagent-render
     (fn [id ctx]
-      (let [form @(reagent/cursor nodes* [id])]
+      (let [form @(reagent/cursor db [id])]
         [-render form ctx]))}))
 
+
+(defn add-to-dom!
+  []
+  (swap! db temp)
+  nil)
+
+(defn log-history
+  [db*]
+  (assoc db* :history db*))
+
+(defn undo!
+  []
+  (reset! db (:history @db))
+  nil)
+
+(defn update-db!
+  
+  [f & args]
+  
+  (let [db* @db
+        
+        db* (log-history db*)
+
+        db* (apply f db* args)]
+    
+    (reset! db db*)
+
+    nil))
+
+(defnav desc- [k]
+  (select* [this db next-fn]
+
+           (let [col (volatile! [])]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col conj  (next-fn (k db)))
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                   @col)))
+  
+  (transform* [this db next-fn]
+              
+              (let [col (volatile! db)]
+
+                (letfn [(gather [k]
+                          
+                          (vswap! col update k next-fn)
+                          
+                          (doseq [c (get-in db [k :children])]
+                            
+                            (gather c)))]
+
+                  (gather k)
+                  @col))))
+
+(defn trsf
+  [db pred-fn]
+  (s/setval [(desc :root) (s/pred pred-fn) :style :color] "red" db))
+
+
+(defn code-col
+  [_]
+  [:div ($ {:flex-direction "column"
+            :height "500px"
+            :padding "30px"
+            :overflow "scroll"
+            :border "solid 2px black"})
+     
+     [render :root nil]])
 
 (defn main-page
   
@@ -693,11 +838,11 @@
    [:div ($ {:width "30%"
              :height "100%"
              :flex-direction "row"
-             :padding "0px 20px"})
+             :padding "0px 20px"}
+            {:class "token"})
     
     [:h1 "Ouroboros"]
-    [text-col state]
-    [render :a nil]]
+    [text-col state]]
 
    [:div ($ {:width "70%"
              :flex-direction "row"

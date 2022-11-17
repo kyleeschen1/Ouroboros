@@ -7,7 +7,7 @@
 ;; Core Protocol
 ;;####################################################################
 
-(declare analyze map-analyze analyze-sexpr form->type assoc-id)
+(declare analyze map-analyze analyze-sexpr form->type assoc-id postprocess-ast)
 
 (defprotocol IAnalyze
   (-analyze [form env]))
@@ -25,9 +25,17 @@
   [form env]
   (mapv (fn [node]
          (analyze node env))
-       form))
+        form))
 
-(defn form->type
+(defn coll-analyze
+  [op parens form env]
+  {:op op
+   :form form
+   :parens parens
+   :children [:elements]
+   :elements (map-analyze form env)})
+
+(defn constant->type
   [form]
   (cond
     (number? form) :number
@@ -46,6 +54,10 @@
     
     (assoc ast :id id :child-ids child-ids :parent-id parent-id)))
 
+(defn postprocess-ast
+  [ast]
+  (assoc-id ast))
+
 ;;------------------------------------
 ;; Protocol Implementation
 ;;------------------------------------
@@ -55,7 +67,7 @@
   Constant
   (-analyze [{:keys [value] :as form} env]
     
-    (let [type (form->type value)
+    (let [type (constant->type value)
           
           name (if (= :string type)
                  (str "\"" value "\"")
@@ -75,52 +87,52 @@
 
   cljs.core/List
   (-analyze [form env]
-    #_{:op (if (= 'tag (first form))
-           :tagged-list
-           :list)
-     :form form
-     :children [:elements]
-     :elements (analyze-sexpr form env)}
-    (analyze-sexpr form env))
+    
+    (if (:quoted? env)
+      
+      (coll-analyze :list ["(" ")"] form env)
+
+      (assoc 
+       (analyze-sexpr form env)
+       :parens ["(" ")"])))
 
   cljs.core/LazySeq
   (-analyze [form env]
-    #_{:op (if (= 'tag (first form))
-           :tagged-list
-           :list)
-     :form form
-     :children [:elements]
-     :elements (analyze-sexpr form env)}
-    (analyze-sexpr form env))
+
+    (if (:quoted? env)
+      
+      (coll-analyze :list ["(" ")"] form env)
+
+      (assoc 
+       (analyze-sexpr form env)
+       :parens ["(" ")"])))
   
   cljs.core/PersistentHashSet
   (-analyze [form env]
-    {:op :set
-     :form form
-     :children [:elements]
-     :elements (map-analyze form env)})
+    (coll-analyze :set ["#{" "}"]  form env))
 
   cljs.core/PersistentVector
   (-analyze [form env]
-    {:op :vector
-     :form form
-     :children [:elements]
-     :elements (map-analyze form env)})
+    (coll-analyze :vector ["[" "]"] form env))
   
   cljs.core/PersistentArrayMap
   (-analyze [form env]
-    {:op :map
-     :form form
-     :children [:elements]
-     :elements (map-analyze form env)})
+    (coll-analyze :map ["{" "}"] form env))
+
+  cljs.core/PersistentHashMap
+  (-analyze [form env]
+    (coll-analyze :map ["{" "}"] form env))
 
   cljs.core/MapEntry
-  (-analyze [[k v :as form] env]
-    {:op :map-entry
-     :form form
-     :children [:key :value]
-     :key (analyze k env)
-     :value (analyze v env)}))
+  (-analyze [form env]
+
+    (let [[k v] form]
+      
+      {:op :map-entry
+       :form form
+       :children [:key :value]
+       :key (analyze k env)
+       :value (analyze v env)})))
 
 ;;####################################################################
 ;; Special Forms
@@ -138,15 +150,6 @@
    :form form
    :children [:f :args]
    :f (analyze op env)
-   :args (map-analyze args env)})
-
-(defmethod analyze-sexpr :tag
-  [[op tag & args :as form] env]
-  {:op :tag
-   :form form
-   :children [:args]
-   :operator op
-   :tag tag
    :args (map-analyze args env)})
 
 (defmethod analyze-sexpr :if
@@ -183,28 +186,46 @@
      :operator (analyze-sf op)
      :arg (analyze arg env)}))
 
+(defmethod analyze-sexpr :fn
+  [[op params body :as form] env]
+    
+  {:op :fn
+   :form form
+   :children [:operator :params :body]
+   :operator (analyze-sf op)
+   :params (analyze params env)
+   :body (analyze body env)})
+
+(defn analyze-binding-pair
+  
+  [env]
+  
+  (fn [form]
+    
+    (let [sym (first form)
+          val (second form)]
+
+      (postprocess-ast
+       
+       {:op :binding-pair
+        :form form
+        :children [:sym :val]
+        :sym (analyze sym env)
+        :val (analyze val env)}))))
+
 (defn analyze-bv
   
   [bv env]
   
-  (let [analyze-pair (fn [form]
-                       (let [sym (first form)
-                             val (second form)]
-
-                         (assoc-id
-                          {:op :binding-pair
-                           :form form
-                           :children [:sym :val]
-                           :sym (analyze sym env)
-                           :val (analyze val env)})))
-
-        bindings (->> bv
+  (let [bindings (->> bv
                       (partition 2)
-                      (mapv analyze-pair))]
+                      (mapv (analyze-binding-pair env)))]
 
-    (assoc-id
+    (postprocess-ast
+     
      {:op :binding-vector
       :form bv
+      :parens ["[" "]"]
       :children [:bindings]
       :bindings bindings})))
 
@@ -220,6 +241,20 @@
      :operator (analyze-sf op)
      :bindings bv
      :body body}))
+
+;;####################################################################
+;; Formatting
+;;####################################################################
+
+
+(defmethod analyze-sexpr :tag
+  [[op tag & args :as form] env]
+  {:op :tag
+   :form form
+   :children [:args]
+   :operator op
+   :tag tag
+   :args (map-analyze args env)})
 
 ;;####################################################################
 ;; Macros

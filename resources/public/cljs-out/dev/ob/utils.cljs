@@ -59,29 +59,43 @@
 (defn tag-id
   [form]
   (if (satisfies? IMeta form)
+    
     (assoc-meta form {:id (gen-id (cond
                                     (coll? form)
                                     "coll"
                                     (symbol? form) "sym"
                                     :else form))})
+    
     (->Constant form {:id (gen-id (str "const-" form))})))
 
 (defn add-display-ids
+  
   [form]
+  
   (if-not (coll? form)
 
     form
     
-    (let [child-ids (mapv (comp :id meta) form)
-         
-          form
-          (assoc-meta form {:child-ids child-ids})
+    (let [child-ids
+
+          (s/select [(s/if-path map?
+                                [s/ALL s/ALL s/META :id]
+                                [s/ALL s/META :id])]
+                    form)
+          form (assoc-meta form {:child-ids child-ids})
 
           id (:id (meta form))]
-      
+
       (s/setval [s/ALL-WITH-META s/META :parent-id] id form))))
 
+(def WALK-ALL
+  (s/recursive-path [] p
+                    
+                    (s/if-path coll?
+                               (s/continue-then-stay s/ALL p)
+                               s/STAY)))
 
 (defn walk-ids
   [form]
-  (clojure.walk/postwalk (comp add-display-ids tag-id)  form))
+  (s/transform [WALK-ALL] (comp add-display-ids tag-id) form)
+  #_(clojure.walk/postwalk (comp add-display-ids tag-id)  form))
