@@ -99,3 +99,5 @@
   [form]
   (s/transform [WALK-ALL] (comp add-display-ids tag-id) form)
   #_(clojure.walk/postwalk (comp add-display-ids tag-id)  form))
+
+(def t :x/a)
