@@ -1,7 +1,21 @@
 
 (ns ^:figwheel-hooks ob.utils
   (:require
-   [com.rpl.specter :as s]))
+   [com.rpl.specter :as s]
+   [re-frame.core :as rf :refer [dispatch subscribe]]))
+
+;;####################################################################
+;; Re-Frame Aliases
+;;####################################################################
+
+;; Thanks to Lamba Island
+
+(def <sub
+  (comp deref rf/subscribe))
+
+(def >evt
+  rf/dispatch)
+
 
 ;;####################################################################
 ;; Constant
@@ -95,9 +109,8 @@
                                (s/continue-then-stay s/ALL p)
                                s/STAY)))
 
+
+
 (defn walk-ids
   [form]
-  (s/transform [WALK-ALL] (comp add-display-ids tag-id) form)
-  #_(clojure.walk/postwalk (comp add-display-ids tag-id)  form))
-
-(def t :x/a)
+  (s/transform [WALK-ALL] (comp add-display-ids tag-id) form))

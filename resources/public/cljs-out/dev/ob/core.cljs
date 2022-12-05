@@ -4,7 +4,10 @@
    [ob.scroll :refer [set-scroll-trigger]]
    [ob.code-to-hiccup :refer [code->hiccup]]
    [ob.analyzer :refer [analyze]]
-   [ob.utils :refer [assoc-meta walk-ids]]
+   
+   [ob.data-to-hiccup :refer [render]]
+   
+   [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
    
    [com.rpl.specter :as s]
@@ -89,13 +92,14 @@
 ;;#######################################################################
 
 (defnav desc [k]
+  
   (select* [this db next-fn]
 
            (let [col (volatile! [])]
 
                 (letfn [(gather [k]
                           
-                          (vswap! col conj  (next-fn (k db)))
+                          (vswap! col conj (next-fn (k db)))
                           
                           (doseq [c (get-in db [k :children])]
                             
@@ -121,7 +125,7 @@
 
 
 
-(defn paren->db
+(defn gen-paren-datum
   
   [parent-id text tag]
   
@@ -132,262 +136,83 @@
          :class ["bracket" tag (str parent-id "-bracket" )]
          :name text}}))
 
-(defn ast->db
+(defn add-paren-data
+  
+  [data-row {:keys [id parens]}]
+  
+  (let [[op cl] parens
+        op-paren (gen-paren-datum id op "opening")
+        cl-paren (gen-paren-datum id cl "closing")
+        
+        parens (merge op-paren cl-paren)
+
+        paren-ids (s/select [s/MAP-KEYS] parens)]
+
+    (merge {id (assoc data-row :parens paren-ids)}
+           op-paren
+           cl-paren)))
+
+
+
+(defn macro->pos-type
+
+  [op]
+  
+  (case op
+    :cond :if
+    :case :let
+    op))
+
+
+(defn op->pos-type
+  
+  [op]
+  
+  (condp #(get %1 %2) op
+    
+    #{:let :loop} :let
+
+    #{:macroexpand} (macro->pos-type op)
+    
+    op))
+
+(defn ast->data
   
   ([ast]
-   (ast->db ast :root))
+   
+   (ast->data ast :root))
 
   ([ast id]
    
-   (let [sel (s/select [AST-DESC #(:id %)] ast)]
+   (let [sel (s/select [AST-DESC (s/pred :id)] ast)]
      
-     (for [{:keys [id op name parens parent-id child-ids]} sel]
+     (for [{:keys [id op type name parent-id child-ids parens] :as sel} sel]
 
+       (let [pos-type (op->pos-type op)
 
-       (let [[paren-ids parens] (when-let [[op cl] parens]
-                                  
-                                  (let [op-paren (paren->db id op "opening")
-                                        cl-paren (paren->db id cl "closing")
-                                        
-                                        parens (merge op-paren cl-paren)
+             data-row {:id id
+                       :op op
+                       :pos-type pos-type
+                       :class [op type]
+                       :name name
+                       :parent-id parent-id
+                       :children child-ids}]
 
-                                        ids (s/select [s/MAP-KEYS] parens)]
+         (if-not parens
 
-                                    [ids parens]))]
+           {id data-row}
 
-         (merge
-          
-          {id (merge {:id id
-                      :op op
-                      :class [op]
-                      :name name
-                      :parent-id parent-id
-                      :children child-ids}
+           (add-paren-data data-row sel)))))))
 
-                     (when paren-ids
-                       {:parens paren-ids}))}
-
-          (when parens
-            parens)))))))
 
 
 
 ;;#######################################################################
-;; Formating
+;; Animations
 ;;#######################################################################
-
-(declare render)
-
-(defn render-ids
-
-  ([parent ids]
-   
-   (into parent
-         
-         (for [id ids]
-           
-           ^{:key id} [render id nil])))
-
-  ([parent ids ctx]
-   
-   (conj (render-ids parent (pop ids))
-         
-         [render (peek ids) ctx])))
-
-(defn render-grid
-  
-  [outer-el inner-el ids ctx]
-    
-  (conj (into outer-el
-
-              (for [id (pop ids)]
-                
-                ^{:key l} (render-ids inner-el id)))
-
-        (render-ids inner-el (peek ids) ctx)))
-
-
-(defmulti position-children
-  (fn [{:keys [op]} ctx]
-    op))
-
-(defmethod position-children :default
-  
-  [{:keys [id name]} ctx]
-  [:div.token {} (str " " name " ")])
-
-(defmethod position-children :root
-  
-  [{:keys [id children]} ctx]
-  
-  (into [:div.root {}]
-        
-        (for [c children]
-
-          [:div [:br]
-           
-           ^{:key c} [render c nil]])))
-
-(defmethod position-children :default
-  
-  [{:keys [id children parens] :as form} ctx]
- 
-  (render-ids [:div.row] children ctx))
-
-(defn col-of-pairs
-  
-  [children ctx]
-  
-  (render-grid [:div.col]
-
-               [:div.row]
-
-               (mapv vec (partition 2 children)) 
-               
-               ctx))
-
-(defmethod position-children :map
-  
-  [{:keys [children] :as form} ctx]
-  
-  (col-of-pairs children ctx))
-
-
-(defmethod position-children :fn
-  
-  [{:keys [children] :as form} ctx]
-
-  (let [[op params body] children]
-
-    [:div.col
-     [:div.row [render op nil] [render params nil]]
-     [render body ctx]]))
-
-(defmethod position-children :if
-  
-  [{:keys [children] :as form} ctx]
-
-  (let [[op pred & args] children]
-
-    [:div.col
-     
-     [:div.row [render op nil] [render pred nil]]
-     
-     [:div.row
-      
-      [:div.indent] (render-ids  [:div.col] (vec args) ctx)]]))
-
-(defmethod position-children :do
-  
-  [{:keys [children] :as form} ctx]
-
-  (let [[op & args] children]
-
-    [:div.col [render op nil]
-
-     [:div.row
-      
-      [:div.indent] (render-ids  [:div.col] (vec args) ctx)]]))
-
-(defmethod position-children :binding-vector
-  
-  [{:keys [children] :as form} ctx]
-
-  (col-of-pairs children ctx))
-
-(defmethod position-children :let
-  
-  [{:keys [children] :as form} ctx]
-
-  (let [[op bindings body] children]
-
-    [:div.col
-     
-     [:div.row [render op nil] [render bindings nil]]
-     
-     [:div.row [:div.indent] [render body ctx]]]))
-
-;;#######################################################################
-;; Rendering
-;;#######################################################################
-
-
-
-(defn position-parens
-  
-  [node ast ctx]
-  
-  (if-let [[op-paren cl-paren] (:parens ast)]
-
-    (let [ctx (if ctx
-                (conj ctx cl-paren)
-                [cl-paren])
-
-          op-paren [render op-paren nil]]
-
-      [(conj node op-paren) ctx])
-    
-    [node ctx]))
-
-(defn format-coll-body
-  
-  [node ast ctx]
-  
-  (let [[node ctx] (position-parens node ast ctx)
-
-        node-body (position-children ast ctx)]
-
-       (conj node node-body)))
-
-(defn format-token-body
-  
-  [node {:keys [name]} ctx]
-  
-  (let [trailing-parens (when ctx
-                          (->> ctx
-                               (reverse)
-                               (map (fn [node] [render node nil]))))]
-    
-    (into [:div.row (conj node name)] trailing-parens)))
-
-
-(defn -render
-  
-  [ast ctx]
-
-  (let [{:keys [id class name style]} ast
-
-        style (assoc style :transition "all 3s")
-        
-        props* {:id (str id)
-                :style style
-              ;;  :on-transition-end (fn [] (pprint (str "End " id)))
-                :class (conj class (when-not (:children ast)
-                                       "token"))}
-
-        node [:div.row props*]]
-
-    (if (:children ast)
-      
-      (format-coll-body node ast ctx)
-      
-      (format-token-body node ast ctx))))
-
-
-
-(defn render
-  
-  [id ctx]
-
-  (fn [id ctx]
-      
-      (let [form @(rf/subscribe [:gen-code id])]
-        
-        [-render form ctx])))
-
-
 
 (defn get-dims
+  
   [id]
   
   (let [attrs (atom {})]
@@ -778,6 +603,35 @@
 
 
 
+
+
+(def PARA
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/stay-then-continue s/DISPENSE (s/collect-one) :nodes s/ALL p)]
+                               s/STAY)))
+
+(def PARA*
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/continue-then-stay :nodes s/ALL p s/VAL) ]
+                               s/STAY)))
+
+
+(defn para
+  
+  [pred f structure]
+  
+  (s/transform [(s/collect-one nil)(PARA pred)] f structure))
+
 (def code
   (code->hiccup
     (analyze
@@ -821,7 +675,10 @@
 (def sample-code
   '(let [x 1
          z (let [t (let [e r]
-                     (let [x {:a b :c 3}]
+                     (loop [x {:a b
+                              :c 3
+                              :b {:k 2
+                                  :c 4}}]
                        (fn [x y]
                          (if true
                            3
@@ -835,12 +692,12 @@
 
 
 (defn code->DB
-  [db]
-  (let [ast (walk-ids sample-code)
-        data (ast->db (analyze ast {}))
+  [db code]
+  (let [ast (walk-ids code)
+        data (ast->data (analyze ast {}))
         id  (:id (meta ast))]
 
-   (s/transform [:root :children] (fn [c] (conj c id) ) (apply merge db data))))
+   (s/setval [:root :children s/END] [id] (apply merge db data))))
 
 ;;#######################################################################
 ;; Event Handlers
@@ -867,15 +724,18 @@
  
    (get code id)))
 
+
+
+
 (rf/reg-event-db
  
  :add-code
  
  [save]
  
- (fn [db _]
+ (fn [db [_ code]]
   
-   (update db :code code->DB)))
+   (update db :code code->DB code)))
 
 
 
@@ -931,15 +791,15 @@
    
    [:p.expo "Next line"]
  
-   [:button {:on-click #(rf/dispatch [:add-code])} "Add Code"]
+   [:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
    
    [:br]
    
-   [:button {:on-click #(rf/dispatch [:animate trsf (fn [n] (= :symbol (:op n)))])} "Turn Symbols Red"]
+   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Turn Symbols Red"]
    
    [:br]
    
-   [:button {:on-click #(rf/dispatch [:undo])} "Undo"]])
+   [:button {:on-click #(>evt [:undo])} "Undo"]])
 
 
 
@@ -951,8 +811,8 @@
             :padding "30px"
             :overflow "scroll"
             :border "solid 2px black"})
-     
-     [render :root nil]])
+   [:div#rooty
+    [render :root nil]]])
 
 (defn main-page
   

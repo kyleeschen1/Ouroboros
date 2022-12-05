@@ -52,7 +52,10 @@
   (let [form (:form ast)
         {:keys [id child-ids parent-id]}  (meta form)]
     
-    (assoc ast :id id :child-ids child-ids :parent-id parent-id)))
+    (assoc ast
+           :id id
+           :child-ids child-ids
+           :parent-id parent-id)))
 
 (defn postprocess-ast
   [ast]
@@ -138,7 +141,7 @@
 ;; Special Forms
 ;;####################################################################
 
-(declare analyze-sf)
+(declare analyze-sf analyze-macro macro?)
 
 (defmulti analyze-sexpr
   (fn [[op & _] _]
@@ -146,14 +149,20 @@
 
 (defmethod analyze-sexpr :default
   [[op & args :as form] env]
-  {:op :invoke
-   :form form
-   :children [:f :args]
-   :f (analyze op env)
-   :args (map-analyze args env)})
+
+  (if (macro? op env)
+    
+    (analyze-macro form env)
+    
+    {:op :invoke
+     :form form
+     :children [:f :args]
+     :f (analyze op env)
+     :args (map-analyze args env)}))
 
 (defmethod analyze-sexpr :if
   [[op pred then else :as form] env]
+  
   {:op :if
    :form form
    :children [:operator :pred :then :else]
@@ -214,6 +223,8 @@
         :val (analyze val env)}))))
 
 (defn analyze-bv
+
+  "Analyzes a binding vector."
   
   [bv env]
   
@@ -242,13 +253,28 @@
      :bindings bv
      :body body}))
 
+(defmethod analyze-sexpr :loop
+  [[op bv body :as form] env]
+
+  (let [bv (analyze-bv bv env)
+        body (analyze body env)]
+    
+    {:op :loop
+     :form form
+     :children [:operator :bindings :body]
+     :operator (analyze-sf op)
+     :bindings bv
+     :body body}))
+
 ;;####################################################################
 ;; Formatting
 ;;####################################################################
 
 
 (defmethod analyze-sexpr :tag
+  
   [[op tag & args :as form] env]
+  
   {:op :tag
    :form form
    :children [:args]
@@ -256,9 +282,33 @@
    :tag tag
    :args (map-analyze args env)})
 
+
 ;;####################################################################
 ;; Macros
 ;;####################################################################
+
+(declare macroexpand*)
+
+(defn macro?
+  [op env]
+  (get '#{cond case} op))
+
+(defn macroexpand*
+  [form env]
+  form)
+
+(defn analyze-macro
+  
+  [{:keys [macro & args :as form]} env]
+
+  (let [expanded (macroexpand* form env)]
+    
+    {:op :macroexpand
+     :form form
+     :macro macro
+     :expanded-form (analyze expanded env)
+     :children [:macro :expanded-form]}))
+
 
 
 ;;------------------------------------
