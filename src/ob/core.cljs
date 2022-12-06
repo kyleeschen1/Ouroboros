@@ -123,26 +123,68 @@
                   (gather k)
                   @col))))
 
+;;#######################################################################
+;; AST -> Datum
+;;#######################################################################
+
+(comment
+
+  (New Pipeline
+       
+       (New Indexer
+
+            (Parses to actual tree)
+            
+            (Analyzing
+             
+             (Uses env to tag special forms)
+             (Type)
+             (For lists, peels off first form))
+
+            (Positioning
+             (Labels collections, tokens)
+             (Adds parentheses)
+             (Adds depth)
+             (Collects child ids))
+
+            (Collected
+             (Down
+              (Depth)
+              (Context))
+             (Up
+              (Child Ids))))
+
+       
+       (New Analyzer
+
+            (Macroexpands)
+            (Looks for Errors)
+            (Tags with Op)
+            (Arg that allows one to pass information one level down)
+
+            )))
 
 
 (defn gen-paren-datum
   
-  [parent-id text tag]
+  [parent-id text depth tag]
   
-  (let [id (keyword (str parent-id "-" tag))]
+  (let [id  (str parent-id "-" tag)]
     
     {id {:op :syntax
          :id id
-         :class ["bracket" tag (str parent-id "-bracket" )]
+         :depth depth
+         :style {} ;; {:font-size (str (* 2  depth) "px")}
+         :class #{"bracket" tag (str parent-id "-bracket" )}
          :name text}}))
 
 (defn add-paren-data
   
-  [data-row {:keys [id parens]}]
+  [data-row {:keys [id parens depth]}]
   
   (let [[op cl] parens
-        op-paren (gen-paren-datum id op "opening")
-        cl-paren (gen-paren-datum id cl "closing")
+        op-paren (gen-paren-datum id op depth "opening")
+        cl-paren (gen-paren-datum id cl depth "closing")
         
         parens (merge op-paren cl-paren)
 
@@ -176,6 +218,30 @@
     
     op))
 
+
+(defn sel->datum
+  
+  [{:keys [id
+           op
+           type
+           name
+           parent-id
+           child-ids
+           parens
+           depth] :as sel}]
+  
+  (let [pos-type (op->pos-type op)]
+    
+    {:id id
+     :op op
+     :pos-type pos-type
+     :class #{op type}
+     :name name
+     :depth depth
+     :style {} #_{:font-size (str (* 2  depth) "px")}
+     :parent-id parent-id
+     :children child-ids}))
+
 (defn ast->data
   
   ([ast]
@@ -186,23 +252,15 @@
    
    (let [sel (s/select [AST-DESC (s/pred :id)] ast)]
      
-     (for [{:keys [id op type name parent-id child-ids parens] :as sel} sel]
+     (for [{:keys [id parens] :as s} sel]
 
-       (let [pos-type (op->pos-type op)
-
-             data-row {:id id
-                       :op op
-                       :pos-type pos-type
-                       :class [op type]
-                       :name name
-                       :parent-id parent-id
-                       :children child-ids}]
-
+       (let [datum (sel->datum s)]
+         
          (if-not parens
 
-           {id data-row}
+           {id datum}
 
-           (add-paren-data data-row sel)))))))
+           (add-paren-data datum s)))))))
 
 
 
@@ -212,26 +270,116 @@
 ;;#######################################################################
 
 (defn get-dims
+
+  "Returns a map, keyed by id, of all of the
+   Bounding Client Rects for all descendent elements
+   of node indicated by id."
   
   [id]
   
-  (let [attrs (atom {})]
+  (let [attrs (atom {})
+
+        scrollX (.-scrollX js/window)
+        scrollY (.-scrollY js/window)]
     
     (-> (js/document.getElementById (str id))
         (.querySelectorAll ".token")
         (.forEach (fn [node]
                     (let [id (.-id node)
-                          dims (.getBoundingClientRect node)]
-                      (swap! attrs assoc id dims)))))
+                          dims (.getBoundingClientRect node)
+
+                          left (.-left dims)
+                          top (.-top dims)]
+                      (swap! attrs assoc (symbol id) {:left (+ left scrollX)
+                                                      :top (+ top scrollY)})))))
 
     @attrs))
 
-(defn trsf
+(defn px*
+  [x]
+  (str x "px"))
+
+(defn add-copy
   
   [db pred-fn]
-  
-  (s/setval [(desc :root) (s/pred pred-fn) :style :color] "red" db))
 
+  (let [dims (get-dims "rooty")
+
+        f (fn [id style]
+            
+            (let [dims (get dims id)]
+      
+              (assoc style
+                     :position "absolute"
+                     :top (px* (:top dims))
+                     :left (px* (:left dims)))))]
+
+
+    (s/transform [(s/submap (keys dims)) s/MAP-VALS (s/collect-one :id) :style] f db)
+    
+    #_(s/setval [(desc :root) (s/pred pred-fn) :style :color] "red" db)))
+
+(defn trsf
+
+  [db pred-fn]
+
+  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] db))
+
+        dims (get-dims "rooty")
+ 
+        interval (/ 10000 max-depth)
+
+        f (fn [depth classes style]
+
+            (let [delay
+                  (if (contains? classes "bracket")
+                    0
+                    0)]
+
+              (assoc style
+                     :transition-duration "4s"
+                     :transition-delay (str (+ delay (* (- max-depth depth) interval)) "ms")
+                     
+                     ;; :top (px* 500)
+                     ;;  :left (px* 500)
+                     :font-size "0px"
+                     :padding-top "0px"
+                     :padding-bottom "0px"
+                     :padding-right "0px"
+                     :padding-left "0px")))]
+
+    (s/transform [s/MAP-VALS
+                  (s/collect-one :depth)
+                  (s/collect-one :class)
+                  :style] f db)))
+
+
+(defn expand
+
+  [db pred-fn]
+
+  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] db))
+
+        dims (get-dims "rooty")
+ 
+        interval (/ 10000 max-depth)
+
+        f (fn [depth id style]
+
+            (assoc style
+                   :transition-duration "4s"
+                   :transition-delay (str (* depth interval) "ms")
+                  
+                   :font-size nil
+                   :padding-top nil
+                   :padding-bottom nil
+                   :padding-right nil
+                   :padding-left nil))]
+
+    (s/transform [s/MAP-VALS
+                  (s/collect-one :depth)
+                  (s/collect-one :id)
+                  :style] f db)))
 
 
 ;;#######################################################################
@@ -688,13 +836,22 @@
                4
                5)) ]
 
-     y))
+     (fn [f]
+       ((fn [x x]
+          (x x))
+        (fn [y]
+          (f (fn [z]
+               ((y y) z))))))))
 
 
 (defn code->DB
+  
   [db code]
+  
   (let [ast (walk-ids code)
+        
         data (ast->data (analyze ast {}))
+        
         id  (:id (meta ast))]
 
    (s/setval [:root :children s/END] [id] (apply merge db data))))
@@ -738,7 +895,6 @@
    (update db :code code->DB code)))
 
 
-
 (rf/reg-event-db
 
  :undo
@@ -765,7 +921,10 @@
 
  (fn [_ _]
 
-   {:code {:root {:op :root :id :root :children []}}}))
+   {:code {:root {:op :root
+                  :id :root
+                  :pos-type :root
+                  :children []}}}))
 
 (defn init
   []
@@ -794,8 +953,12 @@
    [:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
    
    [:br]
+
+   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Contract"]
+
+   [:br]
    
-   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Turn Symbols Red"]
+   [:button {:on-click #(>evt [:animate expand])} "Expand"] 
    
    [:br]
    

@@ -62,7 +62,6 @@
   "Generates a property map from a datum."
   
   [{:keys [id class name children style]}]
- 
 
   {:id (str id)
    :style style

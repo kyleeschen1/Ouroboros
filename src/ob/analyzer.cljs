@@ -7,7 +7,13 @@
 ;; Core Protocol
 ;;####################################################################
 
-(declare analyze map-analyze analyze-sexpr form->type assoc-id postprocess-ast)
+(declare analyze
+         map-analyze
+         analyze-sexpr
+         form->type
+
+         assoc-id
+         postprocess-ast)
 
 (defprotocol IAnalyze
   (-analyze [form env]))
@@ -17,9 +23,16 @@
 ;;------------------------------------
 
 (defn analyze
+  
   [form env]
-  (-> (-analyze form env)
-      (assoc-id)))
+  
+  (let [env (if (:id (meta form))
+              (update env :depth inc)
+              env)]
+    
+    (-> (-analyze form env)
+        (assoc :depth (:depth env))
+        (assoc-id))))
 
 (defn map-analyze
   [form env]
@@ -166,7 +179,7 @@
   {:op :if
    :form form
    :children [:operator :pred :then :else]
-   :operator (analyze-sf op)
+   :operator (analyze-sf op env)
    :pred (analyze pred env)
    :then (analyze then env)
    :else (analyze else env)})
@@ -180,7 +193,7 @@
     {:op :do
      :form form
      :children [:operator :statements :return]
-     :operator (analyze-sf op)
+     :operator (analyze-sf op env)
      :statements statements
      :return return}))
 
@@ -192,7 +205,7 @@
     {:op :quote
      :form form
      :children [:operator :arg]
-     :operator (analyze-sf op)
+     :operator (analyze-sf op env)
      :arg (analyze arg env)}))
 
 (defmethod analyze-sexpr :fn
@@ -201,7 +214,7 @@
   {:op :fn
    :form form
    :children [:operator :params :body]
-   :operator (analyze-sf op)
+   :operator (analyze-sf op env)
    :params (analyze params env)
    :body (analyze body env)})
 
@@ -237,6 +250,7 @@
      {:op :binding-vector
       :form bv
       :parens ["[" "]"]
+      :depth (:depth env)
       :children [:bindings]
       :bindings bindings})))
 
@@ -249,7 +263,7 @@
     {:op :let
      :form form
      :children [:operator :bindings :body]
-     :operator (analyze-sf op)
+     :operator (analyze-sf op env)
      :bindings bv
      :body body}))
 
@@ -262,7 +276,7 @@
     {:op :loop
      :form form
      :children [:operator :bindings :body]
-     :operator (analyze-sf op)
+     :operator (analyze-sf op env)
      :bindings bv
      :body body}))
 
@@ -310,14 +324,16 @@
      :children [:macro :expanded-form]}))
 
 
-
 ;;------------------------------------
 ;; Helpers
 ;;------------------------------------
 
 (defn analyze-sf
-  [operator]
+  [operator {:keys [depth]}]
+  
   (assoc-id
+   
    {:op :special-form
     :form operator
+    :depth depth
     :name (name operator)}))

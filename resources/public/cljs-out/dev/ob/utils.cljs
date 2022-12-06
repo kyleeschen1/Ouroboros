@@ -98,9 +98,14 @@
                     form)
           form (assoc-meta form {:child-ids child-ids})
 
-          id (:id (meta form))]
+          id (:id (meta form))
+          depth (inc (:depth (meta form)))]
 
-      (s/setval [s/ALL-WITH-META s/META :parent-id] id form))))
+      (s/transform [s/ALL-WITH-META s/META] (fn [m]
+                                            
+                                              (assoc m
+                                                     :parent-id id
+                                                     )) form))))
 
 (def WALK-ALL
   (s/recursive-path [] p
@@ -113,4 +118,6 @@
 
 (defn walk-ids
   [form]
-  (s/transform [WALK-ALL] (comp add-display-ids tag-id) form))
+  (let [with-ids (s/transform [WALK-ALL] (comp add-display-ids tag-id) form)]
+
+    with-ids))
