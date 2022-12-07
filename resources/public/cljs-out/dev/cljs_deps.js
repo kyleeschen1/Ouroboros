@@ -184,13 +184,14 @@ goog.addDependency("../ob/utils.js", ['ob.utils'], ['com.rpl.specter', 'cljs.cor
 goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
 goog.addDependency("../ob/data_to_hiccup.js", ['ob.data_to_hiccup'], ['com.rpl.specter', 'ob.utils', 'cljs.core']);
 goog.addDependency("../ob/defs.js", ['ob.defs'], ['cljs.core']);
+goog.addDependency("../cljsjs/d3/development/d3.inc.js", ['d3', 'cljsjs.d3'], [], {'foreign-lib': true});
 goog.addDependency("../cljs/spec/gen/alpha.js", ['cljs.spec.gen.alpha'], ['goog.Uri', 'cljs.core']);
 goog.addDependency("../cljs/spec/alpha.js", ['cljs.spec.alpha'], ['cljs.core', 'goog.object', 'clojure.string', 'clojure.walk', 'cljs.spec.gen.alpha']);
 goog.addDependency("../cljs/repl.js", ['cljs.repl'], ['goog.string', 'cljs.core', 'goog.string.format', 'cljs.spec.alpha']);
-goog.addDependency("../cljsjs/d3/development/d3.inc.js", ['d3', 'cljsjs.d3'], [], {'foreign-lib': true});
+goog.addDependency("../clojure/zip.js", ['clojure.zip'], ['cljs.core']);
 goog.addDependency("../cljsjs/react-dom/development/react-dom.inc.js", ['react_dom', 'cljsjs.react.dom'], ['react'], {'foreign-lib': true});
 goog.addDependency("../reagent/dom.js", ['reagent.dom'], ['reagent.impl.util', 'reagent.impl.protocols', 'reagent.ratom', 'cljs.core', 'reagent.impl.template', 'reagent.impl.batching', 'reagent.impl.input', 'react_dom']);
-goog.addDependency("../ob/core.js", ['ob.core'], ['ob.scroll', 'ob.code_to_hiccup', 'ob.analyzer', 'ob.data_to_hiccup', 'ob.defs', 'ob.utils', 'com.rpl.specter', 'cljs.pprint', 'cljs.repl', 'cljsjs.d3', 'goog.dom', 'reagent.core', 'reagent.dom', 're_frame.core', 'cljs.core']);
+goog.addDependency("../ob/core.js", ['ob.core'], ['ob.scroll', 'ob.code_to_hiccup', 'ob.analyzer', 'ob.data_to_hiccup', 'ob.defs', 'ob.utils', 'com.rpl.specter', 'cljsjs.d3', 'cljs.pprint', 'cljs.repl', 'clojure.zip', 'goog.dom', 'reagent.core', 'reagent.dom', 're_frame.core', 'cljs.core']);
 goog.addDependency("../cljs/test.js", ['cljs.test'], ['cljs.core', 'cljs.pprint', 'clojure.string']);
 goog.addDependency("../figwheel/main/async_result.js", ['figwheel.main.async_result'], ['cljs.core', 'figwheel.repl']);
 goog.addDependency("../figwheel/main/testing.js", ['figwheel.main.testing'], ['goog.dom', 'cljs.core', 'cljs.test', 'clojure.string', 'figwheel.main.async_result']);

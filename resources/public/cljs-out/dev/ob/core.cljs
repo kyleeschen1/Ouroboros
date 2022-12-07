@@ -3,6 +3,7 @@
 
    [ob.scroll :refer [set-scroll-trigger]]
    [ob.code-to-hiccup :refer [code->hiccup]]
+   
    [ob.analyzer :refer [analyze]]
    
    [ob.data-to-hiccup :refer [render]]
@@ -11,13 +12,14 @@
    
    [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
-   
    [com.rpl.specter :as s]
 
+   [cljsjs.d3]
    [cljs.pprint :refer [pprint]]
    [cljs.repl :refer [source]]
+   [clojure.zip :as z]
 
-   [cljsjs.d3]
+   
    [goog.dom :as gdom]
    [reagent.core :as reagent :refer [atom]]
    [reagent.dom :as rdom]
@@ -31,8 +33,7 @@
 ;; AST Navigators
 ;;#######################################################################
 
-(s/declarepath TEMP)
-(s/providepath TEMP [s/FIRST s/FIRST])
+
 
 (def WALK-ALL
   (s/recursive-path [] p
@@ -127,44 +128,6 @@
 ;;#######################################################################
 ;; AST -> Datum
 ;;#######################################################################
-
-(comment
-
-  (New Pipeline
-       
-       (New Indexer
-
-            (Parses to actual tree)
-            
-            (Analyzing
-             
-             (Uses env to tag special forms)
-             (Type)
-             (For lists, peels off first form))
-
-            (Positioning
-             (Labels collections, tokens)
-             (Adds parentheses)
-             (Adds depth)
-             (Collects child ids))
-
-            (Collected
-             (Down
-              (Depth)
-              (Context))
-             (Up
-              (Child Ids))))
-
-       
-       (New Analyzer
-
-            (Macroexpands)
-            (Looks for Errors)
-            (Tags with Op)
-            (Arg that allows one to pass information one level down)
-
-            )))
-
 
 (defn gen-paren-datum
   
@@ -381,44 +344,6 @@
                   (s/collect-one :depth)
                   (s/collect-one :id)
                   :style] f db)))
-
-
-
-
-;;#################################################################################
-;; HTML Utilities
-;;#################################################################################
-
-(defn $
-
-  "Shorthand for generating
-   the style / attr map."
-  
-  
-  ([styles]
-   {:style styles})
-  
-  ([styles attrs]
-   (merge attrs ($ styles))))
-
-(defn br
-  "Adds n breaks."
-  [n]
-  (into [:div] (repeat n [:br])))
-
-;;####################################################################
-;; HTML Skeleton
-;;####################################################################
-
-(defn svg
-  
-  [state]
-  
-  [:svg#main-svg
-
-   ($ {:flex "70%"
-       :height "1000px"
-       :width "100%"})])
 
 
 
@@ -682,23 +607,115 @@
 ;; Defs
 ;;#######################################################################
 
-(def* :core/opening
+(def* :core/root
   
   {:op :text
+   
    :msg "I'm a slob!"
+   
    :header "Lots to like here."
+   
    :nodes [{:op :text
             :id :prelude
             :header "There are lots of reasons to dislike"}
 
            {:op :text
-            :msg
-            "Nobody likes eggplants, and one should note that "}]})
+            :msg "Nobody likes eggplants, and one should note that "}
+
+           :toast/eggplant]})
 
 (def* :toast/eggplant
 
   {:op :text
-   :msg "Howl's moving snowcone"})
+   :msg "Howl's moving snowcone"
+   :nodes [:sweet/toast]})
+
+(def* :sweet/toast
+
+  {:op :text
+   :msg "I hate it."})
+
+
+
+(defn defs->data-zipper
+  
+  [defs]
+  
+  (letfn [(branch? [node]
+            (or (vector? node)
+                (and (map? node)
+                     (:nodes node))))
+          
+          (children [node]
+            (if (vector? node)
+              (seq node)
+              (:nodes node)))
+          
+          (make-node [node children]
+            (if (vector? node)
+              (vec children)
+              (assoc node :nodes (vec children))))]
+
+    (z/zipper branch? children make-node defs)))
+
+
+#_(defn pw-next
+  
+  [loc]
+  
+  (or
+   
+   (and (z/branch? loc)
+        (if (:pre-walked-only? (z/node loc))
+          (z/down loc)
+          loc))
+ 
+   (z/right loc)
+   
+   (loop [p loc]
+     
+     (if (z/up loc)
+       
+       (or (z/right (z/up p))
+           (recur (z/up p)))
+       
+       [(z/node p) :end]))))
+
+#_(defn defs->data
+  
+  [defs]
+
+  (let [loc (defs->data-zipper (:core/root defs))
+        
+        resolve (fn [kw]
+                  (get defs kw))]
+    
+    (loop [loc loc
+
+           acc []
+           c 0]
+
+      (cond
+        
+        (or (> c 100) (z/end? loc))
+        acc
+
+        (keyword? (z/node loc))
+        (recur (z/edit loc resolve) acc (inc c))
+
+        (:pre-walk-only? (z/node loc))
+        (let [loc (z/edit loc (fn [node]
+                                (dissoc node :pre-walk-only?)))]
+          
+          (recur (pw-next loc) (conj acc (z/node loc) (inc c))))
+
+        :else
+        (let [loc (z/edit loc (fn [node]
+                                (if (vector? node)
+                                  node
+                                  (assoc node :pre-walk-only? true))))]
+          
+          (recur (pw-next loc) acc (inc c)))))))
 
 ;;#######################################################################
 ;; Hiccup Manipulation
@@ -846,6 +863,28 @@
   (rf/dispatch-sync [:initialize]))
 
 
+;;#################################################################################
+;; HTML Utilities
+;;#################################################################################
+
+(defn $
+
+  "Shorthand for generating
+   the style / attr map."
+  
+  
+  ([styles]
+   {:style styles})
+  
+  ([styles attrs]
+   (merge attrs ($ styles))))
+
+(defn br
+  "Adds n breaks."
+  [n]
+  (into [:div] (repeat n [:br])))
+
+
 ;;#######################################################################
 ;; Main Page
 ;;#######################################################################
@@ -888,12 +927,15 @@
 
 (defn code-col
   [_]
-  [:div ($ {:flex-direction "column"
+  [:div ($ {;;:flex-direction "column"
+            :position "sticky"
+            :top "30px"
             :height "500px"
             :padding "30px"
             :overflow "scroll"
-            :border "solid 2px black"})
-   [:div#rooty
+            :border "solid 2px white"})
+   
+   [:div#rooty 
     [render :root nil]]])
 
 (defn main-page
@@ -920,14 +962,6 @@
     
     [code-col state]]])
 
-;;#######################################################################
-;; Set Scrolling
-;;#######################################################################
-
-(defn add-scroll-events!
-  [& ids]
-  (doseq [id ids]
-    (set-scroll-trigger id #(js/alert "Wow!"))))
 
 ;;#######################################################################
 ;; Mounting to the Dom

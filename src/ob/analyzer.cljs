@@ -255,6 +255,7 @@
       :bindings bindings})))
 
 (defmethod analyze-sexpr :let
+  
   [[op bv body :as form] env]
 
   (let [bv (analyze-bv bv env)
@@ -329,6 +330,7 @@
 ;;------------------------------------
 
 (defn analyze-sf
+  
   [operator {:keys [depth]}]
   
   (assoc-id
