@@ -21,6 +21,7 @@
 
 (declare datum->hiccup
          datum->props
+         add-transitions
          add-hiccup-contents)
 
 (defn render
@@ -39,7 +40,7 @@
 
    (fn [id ctx]
      
-     (let [datum (<sub [:gen-code id])]
+     (let [datum (<sub [:id->data id])]
        
        [datum->hiccup datum ctx]))))
 
@@ -52,7 +53,11 @@
   
   [datum ctx]
 
-  (let [hiccup [:div.row (datum->props datum)]]
+  (let [props (datum->props datum)
+
+        props (add-transitions datum props)
+        
+        hiccup [:div.row (datum->props datum)]]
 
     (add-hiccup-contents hiccup datum ctx)))
 
@@ -297,3 +302,16 @@
      [:div.row [render op] [render bindings]]
      
      [:div.row [:div.indent] [render body ctx]]]))
+
+
+;;#######################################################################
+;; Transitions
+;;#######################################################################
+
+(defn add-transitions
+  
+  [datum {:keys [id] :as props}]
+  
+  (let [f (<sub [:id->trs id])]
+    
+    props))

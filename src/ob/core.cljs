@@ -6,6 +6,8 @@
    [ob.analyzer :refer [analyze]]
    
    [ob.data-to-hiccup :refer [render]]
+
+   [ob.defs :refer [def* get-defs]]
    
    [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
@@ -24,7 +26,6 @@
   
   (:require-macros
    [com.rpl.specter :refer [defnav comp-paths]]))
-
 
 ;;#######################################################################
 ;; AST Navigators
@@ -382,6 +383,691 @@
                   :style] f db)))
 
 
+
+
+;;#################################################################################
+;; HTML Utilities
+;;#################################################################################
+
+(defn $
+
+  "Shorthand for generating
+   the style / attr map."
+  
+  
+  ([styles]
+   {:style styles})
+  
+  ([styles attrs]
+   (merge attrs ($ styles))))
+
+(defn br
+  "Adds n breaks."
+  [n]
+  (into [:div] (repeat n [:br])))
+
+;;####################################################################
+;; HTML Skeleton
+;;####################################################################
+
+(defn svg
+  
+  [state]
+  
+  [:svg#main-svg
+
+   ($ {:flex "70%"
+       :height "1000px"
+       :width "100%"})])
+
+
+
+
+
+(def PARA
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/stay-then-continue s/DISPENSE (s/collect-one) :nodes s/ALL p)]
+                               s/STAY)))
+
+(def PARA*
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/continue-then-stay :nodes s/ALL p s/VAL) ]
+                               s/STAY)))
+
+
+(defn para
+  
+  [pred f structure]
+  
+  (s/transform [(s/collect-one nil)(PARA pred)] f structure))
+
+(def code
+  (code->hiccup
+    (analyze
+     (walk-ids
+    
+      '(tag expr 
+            (let [x (if (zero? 0)
+                      1
+                      2)
+                  tx [1 2 3]
+                  set (tag quote #{'a b c})
+                  y 
+                  (tag maps {:a 1
+                             :b 3
+                             :c {:e 1
+                                 :b {:g 4
+                                     :h :j
+                                     :k 7}
+                                 :f 4}})
+                  zak (tag let
+                          (+ 3 (let [y 6
+                                     z (let [y 6
+                                             a (let [y 6234567]
+                                                 h)]
+                                         "eggs")]
+                                 jowls)))]
+
+              (do
+                (+ 4 5 37)
+                (- 16 7)
+                (* 14 35)))))
+     {})))
+
+
+#_(-> (js/d3.select "#yo") (.node) (.append (.node jowls)))
+
+;;#######################################################################
+;; Add Code to DB
+;;#######################################################################
+
+(def sample-code
+  '(let [x 1
+         z (let [t (let [e r]
+                     (loop [x {:a b
+                              :c 3
+                              :b {:k 2
+                                  :c 4}}]
+                       (fn [x y]
+                         (if true
+                           3
+                           (+ 1 2)))))]
+             (do
+               3
+               4
+               5)) ]
+
+     (fn [f]
+       ((fn [x x]
+          (x x))
+        (fn [y]
+          (f (fn [z]
+               ((y y) z))))))))
+
+
+(defn code->DB
+  
+  [db code]
+  
+  (let [ast (walk-ids code)
+        
+        data (ast->data (analyze ast {}))
+        
+        id  (:id (meta ast))]
+
+   (s/setval [:root :children s/END] [id] (apply merge db data))))
+
+;;#######################################################################
+;; Event Handlers
+;;#######################################################################
+
+(def save
+  
+  (rf/->interceptor
+
+   :id :save
+
+   :before (fn [ctx]
+
+             (let [cache (fn [db]
+                           (assoc db :history db))]
+
+               (s/transform [:coeffects :db] cache ctx)))))
+
+(rf/reg-sub
+
+ :id->data
+ 
+ (fn [{:keys [display]} [_ id]]
+ 
+   (get display id)))
+
+
+
+
+(rf/reg-event-db
+ 
+ :add-code
+ 
+ [save]
+ 
+ (fn [db [_ code]]
+  
+   (update db :display code->DB code)))
+
+
+(rf/reg-event-db
+
+ :undo
+
+ (fn [db _]
+
+   (:history db)))
+
+(rf/reg-event-db
+ 
+ :animate
+
+ [save]
+ 
+ (fn [db [_ f & args]]
+   
+   (update db :display #(apply f % args))))
+
+
+
+
+
+
+;;#######################################################################
+;; Transition Logic
+;;#######################################################################
+
+
+;; Gives the id of the active transition 
+
+(rf/reg-sub
+
+ :active-trs-id
+
+ (fn [db _]
+   
+   (get db :trs/active-id)))
+
+
+;; Gives the current time direction
+;; Ex: :forward, :backward
+
+(rf/reg-sub
+
+ :time-dir
+
+ (fn [db _]
+   
+   (get db :trs/time-dir)))
+
+;; Gives the transaction records
+
+(rf/reg-sub
+
+ :trs-records
+
+ (fn [db _]
+   
+   (get db :trs/records)))
+
+
+
+;; Returns records for the active transitions
+(rf/reg-sub
+
+ :active-trs-records
+
+ :<- [:trs-records]
+ :<- [:active-trs-id]
+ :<- [:time-dir]
+ 
+ (fn [[records active-id time-dir] _]
+   
+   (get-in records [active-id time-dir])))
+
+;; Returns all active transitions for the id
+(rf/reg-sub
+
+ :id->trs
+
+ :<- [:active-trs-records]
+
+ (fn [records [_ id]]
+
+   (get records id)))
+
+
+
+(defn init-trs
+
+  "Initializes transition data."
+  
+  []
+  
+  {:trs/active-id :init
+   :trs/time-dir :forward
+   :trs/records {:init {:forward [:init]}
+                 :yams {:forward [:yams]}}})
+
+(rf/reg-event-db
+
+ :update-trs
+
+ (fn [db [_ trn-name]]
+   
+   (assoc db :trs/active-id trn-name)))
+
+
+
+
+
+
+;;#######################################################################
+;; Defs
+;;#######################################################################
+
+(def* :core/opening
+  
+  {:op :text
+   :msg "I'm a slob!"
+   :header "Lots to like here."
+   :nodes [{:op :text
+            :id :prelude
+            :header "There are lots of reasons to dislike"}
+
+           {:op :text
+            :msg
+            "Nobody likes eggplants, and one should note that "}]})
+
+(def* :toast/eggplant
+
+  {:op :text
+   :msg "Howl's moving snowcone"})
+
+;;#######################################################################
+;; Hiccup Manipulation
+;;#######################################################################
+
+;; Animate:
+;;
+;; This is the interface for core Hiccup manipulations that
+;; can be composed into increasingly complex animations.
+;;
+;; Each module is responsible for:
+;; 
+;;  1) Altering the data
+;;  2) Specifying when to stop blocking for the next animation
+;;  3) Specifying how to rewind the animation
+;;
+;; To-Do: turn into protocol?
+
+(declare -animate)
+
+(defn animate
+  
+  [db [op params]]
+  
+  (let [td (get db :trs/time-dir :forward)
+        
+        data (-animate op (:display db) params)
+
+        db* (update db :display merge data)
+
+        db* (assoc db :id/version (gensym "version-"))]
+
+    {:edit/op op
+     :edit/id (gensym "edit/")
+     :params params
+     :n-rows (count data)
+     :db db
+     :db* db*}))
+
+
+;;-----------------------------------
+;; The Great Declaration Itself...
+;;-----------------------------------
+
+(defmulti -animate
+  
+  (fn [op db params]
+
+    op))
+
+;;-----------------------------------
+;; Appending
+;;-----------------------------------
+
+(defmethod -animate :append
+  
+  [_ db {:keys [code]}]
+
+  (let [ast (walk-ids code)
+        
+        data (ast->data (analyze ast {}))
+
+        ;; Get local root id of current dataset
+        local-root-id  (:id (meta ast))
+
+        ;; Update database
+        data (apply merge db data)
+
+        ;; Append the local root id to the children of root
+        root* (s/select :root
+                        (s/setval [:root :children s/END]
+                                  [local-root-id]
+                                  db))]
+
+    (merge root* data)))
+
+
+
+;;-----------------------------------
+;; Removing
+;;-----------------------------------
+
+(defmethod -animate :remove
+  [_ _ _]
+  )
+
+;;-----------------------------------
+;; Substitution
+;;-----------------------------------
+
+(defmethod -animate :substitute
+  [_ _ _]
+  )
+
+
+;;-----------------------------------
+;; Copying
+;;-----------------------------------
+
+(defmethod -animate :copy
+  [_ _ _]
+  )
+
+
+;;-----------------------------------
+;; Modifying
+;;-----------------------------------
+
+(defmethod -animate :modify
+  [_ _ _]
+  )
+
+;;-----------------------------------
+;; Transitions
+;;-----------------------------------
+
+(defmethod -animate :transition
+  [_ _ _]
+  )
+
+
+
+
+
+;;#######################################################################
+;; Initializing
+;;#######################################################################
+
+(rf/reg-event-db
+
+ :initialize
+
+ (fn [_ _]
+
+   (merge (init-trs)
+          
+          
+          {:code {:root {:op :root
+                         :id :root
+                         :pos-type :root
+                         :children []}}})))
+
+(defn init
+  []
+  (rf/dispatch-sync [:initialize]))
+
+
+;;#######################################################################
+;; Main Page
+;;#######################################################################
+
+(defn text-col
+  
+  [state]
+  
+  [:div#text-col ($ {:overflow "scroll"
+                     :display "inline-block"
+                     :font-size "12px"})
+   
+   [:p.expo
+
+    "There is some exposition... here is some more exposition....
+     and now here is a ridiculously long word fmwk,;'f,ew;l'dffwm;lk'fkwefwelkfmk"]
+   
+   [:p.expo "Next line"]
+ 
+   [:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
+   
+   [:br]
+
+   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Contract"]
+
+   [:br]
+   
+   [:button {:on-click #(>evt [:animate expand])} "Expand"]
+
+   [:br]
+   
+   [:button {:on-click #(>evt [:update-trs :yams])} "Init"] 
+   
+   [:br]
+   
+   [:button {:on-click #(>evt [:undo])} "Undo"]])
+
+
+
+
+(defn code-col
+  [_]
+  [:div ($ {:flex-direction "column"
+            :height "500px"
+            :padding "30px"
+            :overflow "scroll"
+            :border "solid 2px black"})
+   [:div#rooty
+    [render :root nil]]])
+
+(defn main-page
+  
+  [state]
+   
+  [:div#main-page
+
+   ($ {:display "flex"
+       :height "5000px"})
+
+   [:div ($ {:width "30%"
+             :height "100%"
+             :flex-direction "row"
+             :padding "0px 20px"}
+            {:class "token"})
+    
+    [:h1 "Ouroboros"]
+    [text-col state]]
+
+   [:div ($ {:width "70%"
+             :flex-direction "row"
+             :padding "30px"})
+    
+    [code-col state]]])
+
+;;#######################################################################
+;; Set Scrolling
+;;#######################################################################
+
+(defn add-scroll-events!
+  [& ids]
+  (doseq [id ids]
+    (set-scroll-trigger id #(js/alert "Wow!"))))
+
+;;#######################################################################
+;; Mounting to the Dom
+;;#######################################################################
+
+(defn get-app-element []
+  (gdom/getElement "app"))
+
+(defn mount
+  [el]
+  (rdom/render [main-page {}] el))
+
+(defn mount-app-element []
+  (when-let [el (get-app-element)]
+    (init)
+    (mount el)))
+
+;; conditionally start your application based on the presence of an "app" element
+;; this is particularly helpful for testing this ns without launching the app
+(mount-app-element)
+
+;; specify reload hook with ^:after-load metadata
+(defn ^:after-load on-reload []
+  (mount-app-element)
+  ;; optionally touch your app-state to force rerendering depending on
+  ;; your application
+  ;; (swap! app-state update-in [:__figwheel_counter] inc)
+)
+
+;;#######################################################################
+;; Pure Garbage
+;;#######################################################################
+
+#_(defn enclose
+  
+  [op cl coll row?]
+  
+  (let [coll-id (id coll)
+
+        toast (atom {})
+        
+        params-fn (fn [prefix coll-id]
+
+                    (let [id (str prefix coll-id)
+                          cls (str coll-id "-bracket")]
+                      
+                      {:id id
+                       :class [prefix cls]
+        
+                       :on-mouse-over (fn [this]
+                                        (println (.-top (.getBoundingClientRect (:form @toast))))
+                                        (println id)
+                                        (-> (js/d3.selectAll (str "." cls))
+                                            (.style "color" "red")))
+                       :on-mouse-out (fn []
+                                       (-> (js/d3.selectAll (str "." cls))
+                                           (.style "color" "white")))}))
+
+        
+ 
+        od [:div (params-fn "opening" coll-id) op]
+        cd [:div (merge (params-fn "closing" coll-id)
+                        {:ref #(swap! toast assoc :form %)}) cl]
+
+        ;; Add closing to the end of the
+        ;; last element.
+        #_cs #_(fn jowls [coll]
+             (s/transform [s/LAST]
+                          
+                          (fn [node]
+                            (if (and (coll? node)
+                                     (= (last node))) )
+                            [node cd]) coll))
+
+        coll (s/transform [s/LAST]
+                          (fn [node]
+                            (assoc-meta node {:closing-parens (conj (:closing-parens (meta coll)) cd)}))
+                          coll)
+        
+        ;; Determine direction
+        f (if row?
+            row
+            col)]
+
+    [:span.row od (f coll)]
+    #_(row (with-meta [od (f coll) cd] (meta coll)))))
+
+
+#_[:div
+
+    [:span  {:style {:z-index "1"
+                             ;;:position "absolute"
+                        :left 0
+                        :top 0}}
+     [:div.yo {:style {:z-index "2"
+                            :position "relative"
+                             }}
+      "toast"]]
+
+    [:span  {:style {:z-index "1"
+                             ;;:position "absolute"
+                     :left 0
+                     :top 0}}
+     [:div.yo {:style {:z-index "2"
+                             :position "relative"
+                             }}
+      "jowls"]]
+
+    
+    #_[:span.yo {:style {:z-index "1"
+                   ;;:position "absolute"
+                   :color "red"}}
+     "Jowls"]]
+
+
+
+
+
+(comment
+
+  (And animation returns a map with
+       (Ids affected)
+       (One transition function for delay, duration, ease, etc.
+            (takes in current time preference))
+       (One function for affected data)
+       (Name))
+
+  (Running animation
+           (counts affected ids)
+           (attaches on-end handler that will count when event finishes)
+           (dispatches next event on queue if any))
+  
+  (History is saved
+           (By event Id name)
+           (Saves data, init time, times it completed, etc.)
+           (To rewind
+               (time to completion is subtracted from max time)
+               (that becomes the new delay))
+           ()))
+
 ;;#######################################################################
 ;; Planning
 ;;#######################################################################
@@ -712,414 +1398,3 @@
                         (collapse false)
                         
                         (copy false)))))))))
-
-
-;;#################################################################################
-;; HTML Utilities
-;;#################################################################################
-
-(defn $
-
-  "Shorthand for generating
-   the style / attr map."
-  
-  
-  ([styles]
-   {:style styles})
-  
-  ([styles attrs]
-   (merge attrs ($ styles))))
-
-(defn br
-  "Adds n breaks."
-  [n]
-  (into [:div] (repeat n [:br])))
-
-;;####################################################################
-;; HTML Skeleton
-;;####################################################################
-
-(defn svg
-  
-  [state]
-  
-  [:svg#main-svg
-
-   ($ {:flex "70%"
-       :height "1000px"
-       :width "100%"})])
-
-
-
-
-
-(def PARA
-  
-  "Prewalks the structure, but inserts the transformed branch
-  as the first argument to the leaf nodes."
-  
-  (s/recursive-path [pred] p
-                    (s/if-path pred
-                               [(s/stay-then-continue s/DISPENSE (s/collect-one) :nodes s/ALL p)]
-                               s/STAY)))
-
-(def PARA*
-  
-  "Prewalks the structure, but inserts the transformed branch
-  as the first argument to the leaf nodes."
-  
-  (s/recursive-path [pred] p
-                    (s/if-path pred
-                               [(s/continue-then-stay :nodes s/ALL p s/VAL) ]
-                               s/STAY)))
-
-
-(defn para
-  
-  [pred f structure]
-  
-  (s/transform [(s/collect-one nil)(PARA pred)] f structure))
-
-(def code
-  (code->hiccup
-    (analyze
-     (walk-ids
-    
-      '(tag expr 
-            (let [x (if (zero? 0)
-                      1
-                      2)
-                  tx [1 2 3]
-                  set (tag quote #{'a b c})
-                  y 
-                  (tag maps {:a 1
-                             :b 3
-                             :c {:e 1
-                                 :b {:g 4
-                                     :h :j
-                                     :k 7}
-                                 :f 4}})
-                  zak (tag let
-                          (+ 3 (let [y 6
-                                     z (let [y 6
-                                             a (let [y 6234567]
-                                                 h)]
-                                         "eggs")]
-                                 jowls)))]
-
-              (do
-                (+ 4 5 37)
-                (- 16 7)
-                (* 14 35)))))
-     {})))
-
-
-#_(-> (js/d3.select "#yo") (.node) (.append (.node jowls)))
-
-;;#######################################################################
-;; Add Code to DB
-;;#######################################################################
-
-(def sample-code
-  '(let [x 1
-         z (let [t (let [e r]
-                     (loop [x {:a b
-                              :c 3
-                              :b {:k 2
-                                  :c 4}}]
-                       (fn [x y]
-                         (if true
-                           3
-                           (+ 1 2)))))]
-             (do
-               3
-               4
-               5)) ]
-
-     (fn [f]
-       ((fn [x x]
-          (x x))
-        (fn [y]
-          (f (fn [z]
-               ((y y) z))))))))
-
-
-(defn code->DB
-  
-  [db code]
-  
-  (let [ast (walk-ids code)
-        
-        data (ast->data (analyze ast {}))
-        
-        id  (:id (meta ast))]
-
-   (s/setval [:root :children s/END] [id] (apply merge db data))))
-
-;;#######################################################################
-;; Event Handlers
-;;#######################################################################
-
-(def save
-  
-  (rf/->interceptor
-
-   :id :save
-
-   :before (fn [ctx]
-
-             (let [cache (fn [db]
-                           (assoc db :history db))]
-
-               (s/transform [:coeffects :db] cache ctx)))))
-
-(rf/reg-sub
-
- :gen-code
- 
- (fn [{:keys [code]} [_ id]]
- 
-   (get code id)))
-
-
-
-
-(rf/reg-event-db
- 
- :add-code
- 
- [save]
- 
- (fn [db [_ code]]
-  
-   (update db :code code->DB code)))
-
-
-(rf/reg-event-db
-
- :undo
-
- (fn [db _]
-
-   (:history db)))
-
-(rf/reg-event-db
- 
- :animate
-
- [save]
- 
- (fn [db [_ f & args]]
-   
-   (update db :code #(apply f % args))))
-
-
-
-(rf/reg-event-db
-
- :initialize
-
- (fn [_ _]
-
-   {:code {:root {:op :root
-                  :id :root
-                  :pos-type :root
-                  :children []}}}))
-
-(defn init
-  []
-  (rf/dispatch-sync [:initialize]))
-
-
-;;#######################################################################
-;; Main Page
-;;#######################################################################
-
-(defn text-col
-  
-  [state]
-  
-  [:div#text-col ($ {:overflow "scroll"
-                     :display "inline-block"
-                     :font-size "12px"})
-   
-   [:p.expo
-
-    "There is some exposition... here is some more exposition....
-     and now here is a ridiculously long word fmwk,;'f,ew;l'dffwm;lk'fkwefwelkfmk"]
-   
-   [:p.expo "Next line"]
- 
-   [:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
-   
-   [:br]
-
-   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Contract"]
-
-   [:br]
-   
-   [:button {:on-click #(>evt [:animate expand])} "Expand"] 
-   
-   [:br]
-   
-   [:button {:on-click #(>evt [:undo])} "Undo"]])
-
-
-
-
-(defn code-col
-  [_]
-  [:div ($ {:flex-direction "column"
-            :height "500px"
-            :padding "30px"
-            :overflow "scroll"
-            :border "solid 2px black"})
-   [:div#rooty
-    [render :root nil]]])
-
-(defn main-page
-  
-  [state]
-   
-  [:div#main-page
-
-   ($ {:display "flex"
-       :height "5000px"})
-
-   [:div ($ {:width "30%"
-             :height "100%"
-             :flex-direction "row"
-             :padding "0px 20px"}
-            {:class "token"})
-    
-    [:h1 "Ouroboros"]
-    [text-col state]]
-
-   [:div ($ {:width "70%"
-             :flex-direction "row"
-             :padding "30px"})
-    
-    [code-col state]]])
-
-;;#######################################################################
-;; Set Scrolling
-;;#######################################################################
-
-(defn add-scroll-events!
-  [& ids]
-  (doseq [id ids]
-    (set-scroll-trigger id #(js/alert "Wow!"))))
-
-;;#######################################################################
-;; Mounting to the Dom
-;;#######################################################################
-
-(defn get-app-element []
-  (gdom/getElement "app"))
-
-(defn mount
-  [el]
-  (rdom/render [main-page {}] el))
-
-(defn mount-app-element []
-  (when-let [el (get-app-element)]
-    (init)
-    (mount el)))
-
-;; conditionally start your application based on the presence of an "app" element
-;; this is particularly helpful for testing this ns without launching the app
-(mount-app-element)
-
-;; specify reload hook with ^:after-load metadata
-(defn ^:after-load on-reload []
-  (mount-app-element)
-  ;; optionally touch your app-state to force rerendering depending on
-  ;; your application
-  ;; (swap! app-state update-in [:__figwheel_counter] inc)
-)
-
-;;#######################################################################
-;; Pure Garbage
-;;#######################################################################
-
-#_(defn enclose
-  
-  [op cl coll row?]
-  
-  (let [coll-id (id coll)
-
-        toast (atom {})
-        
-        params-fn (fn [prefix coll-id]
-
-                    (let [id (str prefix coll-id)
-                          cls (str coll-id "-bracket")]
-                      
-                      {:id id
-                       :class [prefix cls]
-        
-                       :on-mouse-over (fn [this]
-                                        (println (.-top (.getBoundingClientRect (:form @toast))))
-                                        (println id)
-                                        (-> (js/d3.selectAll (str "." cls))
-                                            (.style "color" "red")))
-                       :on-mouse-out (fn []
-                                       (-> (js/d3.selectAll (str "." cls))
-                                           (.style "color" "white")))}))
-
-        
- 
-        od [:div (params-fn "opening" coll-id) op]
-        cd [:div (merge (params-fn "closing" coll-id)
-                        {:ref #(swap! toast assoc :form %)}) cl]
-
-        ;; Add closing to the end of the
-        ;; last element.
-        #_cs #_(fn jowls [coll]
-             (s/transform [s/LAST]
-                          
-                          (fn [node]
-                            (if (and (coll? node)
-                                     (= (last node))) )
-                            [node cd]) coll))
-
-        coll (s/transform [s/LAST]
-                          (fn [node]
-                            (assoc-meta node {:closing-parens (conj (:closing-parens (meta coll)) cd)}))
-                          coll)
-        
-        ;; Determine direction
-        f (if row?
-            row
-            col)]
-
-    [:span.row od (f coll)]
-    #_(row (with-meta [od (f coll) cd] (meta coll)))))
-
-
-#_[:div
-
-    [:span  {:style {:z-index "1"
-                             ;;:position "absolute"
-                        :left 0
-                        :top 0}}
-     [:div.yo {:style {:z-index "2"
-                            :position "relative"
-                             }}
-      "toast"]]
-
-    [:span  {:style {:z-index "1"
-                             ;;:position "absolute"
-                     :left 0
-                     :top 0}}
-     [:div.yo {:style {:z-index "2"
-                             :position "relative"
-                             }}
-      "jowls"]]
-
-    
-    #_[:span.yo {:style {:z-index "1"
-                   ;;:position "absolute"
-                   :color "red"}}
-     "Jowls"]]
-
