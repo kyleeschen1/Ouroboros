@@ -13,7 +13,7 @@
    [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
    [ob.update-db :refer [run-db-update]]
-   [ob.event-loop]
+   [ob.event-loop :refer [animate animate!]]
 
    
 
@@ -294,11 +294,7 @@
 ;; Animations
 ;;######################################################################
 
-(defmulti animate
-  
-  (fn [tag _ _]
-    
-    tag))
+
 
 (defmethod animate :add-code*
   
@@ -328,6 +324,7 @@
   [_ db _]
 
   (let [db (:display db)
+        
         max-depth (apply max (s/select [s/MAP-VALS :depth] db))
 
         dims (get-dims "code-col")
@@ -336,22 +333,17 @@
 
         f (fn [depth classes style]
 
-            (let [delay
-                  (if (contains? classes "bracket")
-                    0
-                    0)]
-
-              (assoc style
-                     :transition-duration "4s"
-                     :transition-delay (str (+ delay (* (- max-depth depth) interval)) "ms")
-                     
-                     ;; :top (px* 500)
-                     ;;  :left (px* 500)
-                     :font-size "0px"
-                     :padding-top "0px"
-                     :padding-bottom "0px"
-                     :padding-right "0px"
-                     :padding-left "0px")))
+            (assoc style
+                   :transition-duration "4s"
+                   :transition-delay (str (* (- max-depth depth) interval) "ms")
+                   
+                   ;; :top (px* 500)
+                   ;;  :left (px* 500)
+                   :font-size "0px"
+                   :padding-top "0px"
+                   :padding-bottom "0px"
+                   :padding-right "0px"
+                   :padding-left "0px"))
 
         data
 
@@ -406,34 +398,10 @@
 
 
 
-(rf/reg-event-fx
 
- :run-animation
 
- (fn [{db :db [_ tag & params] :event}]
-   
-   (let [cf (animate tag db (vec params))]
 
-     {:enqueue-animation! cf})))
 
-(defn animate!
-
-  [& args]
-
-  (>evt (into [:run-animation] args)))
-
-(def save
-  
-  (rf/->interceptor
-
-   :id :save
-
-   :before (fn [ctx]
-
-             (let [cache (fn [db]
-                           (assoc db :history db))]
-
-               (s/transform [:coeffects :db] cache ctx)))))
 
 (rf/reg-sub
 

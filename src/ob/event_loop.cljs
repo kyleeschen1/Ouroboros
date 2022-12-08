@@ -13,11 +13,37 @@
 
 
 ;;#######################################################################
+;; Animate Multimethod
+;;#######################################################################
+
+
+(defmulti animate
+  
+  (fn [tag _ _]
+    
+    tag))
+
+
+;;#######################################################################
 ;; Animation Handlers
 ;;#######################################################################
 
-(def evt-chan
+
+(def paused?
+  (atom false))
+
+(def requests
   (a/chan))
+
+
+(defn animate!
+
+  "Puts an animation request onto
+   the event channel."
+
+  [& args]
+
+  (a/put! requests (vec args)))
 
 (defn block
   
@@ -26,27 +52,86 @@
   (a/timeout (or time
                  (<sub [:standard-block]))))
 
+
+(declare process-request)
+
 (defn run-event-loop!
 
-  "Dispatches events when not paused,
-   blocking if appropriate."
+  "Sets up an event for processing,
+   blocking until its completion."
   
   []
   
   (go-loop []
 
-    (if (<sub [:paused?])
+    (let [rq (a/<! requests)]
+      
+      (a/<! (process-request rq))
+      
+      (recur))))
 
-      (do
-        (a/<! (a/timeout 100))
-        (recur))
+(defn process-request
 
-      (let [cf (a/<! evt-chan)]
-        
-        (>evt [:update-db cf])
-        
-        (a/<! (block cf))
-        (recur)))))
+  "Processes a request, providing a
+   channel that will block until completion."
+  
+  [evt]
+
+  (let [c (a/chan)]
+    
+    (>evt (into [:run-animation c] evt))
+
+    c))
+
+
+(defn execute-animation-request
+
+  "Takes in the db and a channel / animation
+   request pair, then:
+ 
+   1) computes a sequence of hiccup updates
+   2) applies each update, blocking between
+
+   Once everything has been processed, it closes
+   the provided channel."
+
+  [{db :db [_ channel tag & params] :event}]
+   
+   (let [cf (animate tag db (vec params))
+
+         configs (if (vector? cf)
+                   cf
+                   [cf])]
+
+     (go-loop [[c & cs :as configs] configs]
+
+       (cond
+
+         @paused?
+         (do         
+           (a/<! (a/timeout 100))       
+           (recur configs))
+
+         (not (seq configs))
+         (a/close! channel)
+
+         :else
+         (do
+
+           (>evt [:update-db c])
+           
+           (a/<! (block c))
+           
+           (recur cs))))))
+
+
+(rf/reg-event-fx
+
+ :run-animation
+
+ execute-animation-request)
+
+
 
 
 ;;#######################################################################
@@ -61,30 +146,12 @@
    
    (run-event-loop!)))
 
-(rf/reg-fx
-
- :enqueue-animation!
-
- (fn enqueue [cf]
-
-   (if (map? cf)
-
-     ;; Maps are put directly on the channel
-     (a/put! evt-chan cf)
-
-     ;; Vectors are processed sequentially
-     (doseq [c cf]
-       
-       (enqueue c)))))
-
 
 (rf/reg-event-db
 
  :update-db
 
  run-db-update)
-
-
 
 
 ;;#######################################################################
