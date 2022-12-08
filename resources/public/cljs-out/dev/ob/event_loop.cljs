@@ -16,17 +16,15 @@
 ;; Animation Handlers
 ;;#######################################################################
 
-(def paused?
-  (atom false))
-
 (def evt-chan
   (a/chan))
 
 (defn block
   
-  [{:keys [time] :or {time 3000}}]
+  [{:keys [time]}]
   
-  (a/timeout time))
+  (a/timeout (or time
+                 (<sub [:standard-block]))))
 
 (defn run-event-loop!
 
@@ -37,17 +35,18 @@
   
   (go-loop []
 
-    (if @paused?
+    (if (<sub [:paused?])
 
-      (a/<! (a/timeout 100))
+      (do
+        (a/<! (a/timeout 100))
+        (recur))
 
       (let [cf (a/<! evt-chan)]
         
         (>evt [:update-db cf])
         
-        (a/<! (block cf))))
-
-    (recur)))
+        (a/<! (block cf))
+        (recur)))))
 
 
 ;;#######################################################################
@@ -61,15 +60,6 @@
  (fn [_]
    
    (run-event-loop!)))
-
-(rf/reg-fx
-
- :pause!
-
- (fn [status]
-   
-   (reset! paused? status)))
-
 
 (rf/reg-fx
 
@@ -94,3 +84,33 @@
 
  run-db-update)
 
+
+
+
+;;#######################################################################
+;; Pausing and Blocking
+;;#######################################################################
+
+(rf/reg-event-db
+
+ :pause!
+
+ (fn [db _]
+   
+   (update db :paused? not)))
+
+(rf/reg-sub
+ 
+ :paused?
+ 
+ (fn [{:keys [paused?]}]
+   
+   paused?))
+
+(rf/reg-sub
+ 
+ :standard-block
+ 
+ (fn [{:keys [standard-block]}]
+   
+   standard-block))

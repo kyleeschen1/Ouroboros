@@ -210,7 +210,6 @@
      :class #{op type}
      :name name
      :depth depth
-     :style {} #_{:font-size (str (* 2  depth) "px")}
      :parent-id parent-id
      :children child-ids}))
 
@@ -323,6 +322,8 @@
   [(animate :add-code* db code)
    (animate :add-code* db code)])
 
+
+
 (defmethod animate :contract
   [_ db _]
 
@@ -360,6 +361,7 @@
                       :style] f db)]
     
     {:op :update
+     :time 10000
      :data data}))
 
 
@@ -414,7 +416,11 @@
 
      {:enqueue-animation! cf})))
 
+(defn animate!
 
+  [& args]
+
+  (>evt (into [:run-animation] args)))
 
 (def save
   
@@ -652,8 +658,6 @@
           (recur (pw-next loc) acc (inc c)))))))
 
 
-
-
 ;;#######################################################################
 ;; Initializing
 ;;#######################################################################
@@ -667,7 +671,9 @@
    {:init-event-loop! nil
     
     :db (merge (init-trs)
-               
+
+               {:standard-block 3000
+                :paused? false}
                
                {:display {:root {:op :root
                               :id :root
@@ -731,7 +737,7 @@
 
 (defn text-col
   
-  [state]
+  []
   
   [:div#text-col ($ {:overflow "scroll"
                      :display "inline-block"
@@ -743,22 +749,25 @@
      and now here is a ridiculously long word fmwk,;'f,ew;l'dffwm;lk'fkwefwelkfmk"]
    
    [:p.expo "Next line"]
- 
-   ;;[:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
 
-   [:button {:on-click #(>evt [:run-animation :add-code sample-code])} "Add code"]
+   #_[:button {:on-click #(>evt [:run-animation :add-code sample-code])} "Add code"]
+   [:button {:on-click #(animate! :add-code sample-code)} "Add code"]
    
    [:br]
 
-   [:button {:on-click #(>evt [:run-animation :contract])} "Contract"]
+   [:button {:on-click #(animate! :contract)} "Contract"]
 
    [:br]
    
-   [:button {:on-click #(>evt [:run-animation :expand])} "Expand"]
+   [:button {:on-click #(animate! :expand)} "Expand"]
 
    [:br]
    
    [:button {:on-click #(>evt [:update-trs :yams])} "Init"] 
+   
+   [:br]
+   
+   [:button {:on-click #(>evt [:pause!])} "||"]
    
    [:br]
    
@@ -768,22 +777,21 @@
 
 
 (defn code-col
-  [_]
-  [:div ($ {;;:flex-direction "column"
-            :position "sticky"
+  []
+  [:div ($ {:position "sticky"
             :top "30px"
             :height "500px"
             :padding "30px"
             :overflow "scroll"
-            :border "solid 2px white"})
+            :border "solid 2px white"}
+
+           {:id "code-col"})
    
-   [:div#code-col
-    
-    [render :root nil]]])
+   [render :root nil]])
 
 (defn main-page
   
-  [state]
+  []
    
   [:div#main-page
 
@@ -797,13 +805,13 @@
             {:class "token"})
     
     [:h1 "Ouroboros"]
-    [text-col state]]
+    [text-col]]
 
    [:div ($ {:width "70%"
              :flex-direction "row"
              :padding "30px"})
     
-    [code-col state]]])
+    [code-col]]])
 
 
 ;;#######################################################################
@@ -815,7 +823,7 @@
 
 (defn mount
   [el]
-  (rdom/render [main-page {}] el))
+  (rdom/render [main-page] el))
 
 (defn mount-app-element []
   (when-let [el (get-app-element)]
