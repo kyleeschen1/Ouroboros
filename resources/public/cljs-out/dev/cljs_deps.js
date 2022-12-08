@@ -184,6 +184,15 @@ goog.addDependency("../ob/utils.js", ['ob.utils'], ['com.rpl.specter', 'cljs.cor
 goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
 goog.addDependency("../ob/data_to_hiccup.js", ['ob.data_to_hiccup'], ['com.rpl.specter', 'ob.utils', 'cljs.core']);
 goog.addDependency("../ob/defs.js", ['ob.defs'], ['cljs.core']);
+goog.addDependency("../ob/update_db.js", ['ob.update_db'], ['com.rpl.specter', 'cljs.core']);
+goog.addDependency("../cljs/core/async/impl/protocols.js", ['cljs.core.async.impl.protocols'], ['cljs.core']);
+goog.addDependency("../cljs/core/async/impl/buffers.js", ['cljs.core.async.impl.buffers'], ['cljs.core', 'cljs.core.async.impl.protocols']);
+goog.addDependency("../cljs/core/async/impl/dispatch.js", ['cljs.core.async.impl.dispatch'], ['cljs.core', 'cljs.core.async.impl.buffers', 'goog.async.nextTick']);
+goog.addDependency("../cljs/core/async/impl/channels.js", ['cljs.core.async.impl.channels'], ['cljs.core.async.impl.dispatch', 'cljs.core', 'cljs.core.async.impl.buffers', 'cljs.core.async.impl.protocols']);
+goog.addDependency("../cljs/core/async/impl/ioc_helpers.js", ['cljs.core.async.impl.ioc_helpers'], ['cljs.core', 'cljs.core.async.impl.protocols']);
+goog.addDependency("../cljs/core/async/impl/timers.js", ['cljs.core.async.impl.timers'], ['cljs.core.async.impl.channels', 'cljs.core.async.impl.dispatch', 'cljs.core', 'cljs.core.async.impl.protocols']);
+goog.addDependency("../cljs/core/async.js", ['cljs.core.async'], ['cljs.core.async.impl.channels', 'cljs.core.async.impl.dispatch', 'cljs.core', 'cljs.core.async.impl.buffers', 'cljs.core.async.impl.protocols', 'cljs.core.async.impl.ioc_helpers', 'cljs.core.async.impl.timers']);
+goog.addDependency("../ob/event_loop.js", ['ob.event_loop'], ['ob.update_db', 'ob.utils', 'cljs.core.async', 're_frame.core', 'cljs.core']);
 goog.addDependency("../cljsjs/d3/development/d3.inc.js", ['d3', 'cljsjs.d3'], [], {'foreign-lib': true});
 goog.addDependency("../cljs/spec/gen/alpha.js", ['cljs.spec.gen.alpha'], ['goog.Uri', 'cljs.core']);
 goog.addDependency("../cljs/spec/alpha.js", ['cljs.spec.alpha'], ['cljs.core', 'goog.object', 'clojure.string', 'clojure.walk', 'cljs.spec.gen.alpha']);
@@ -191,7 +200,7 @@ goog.addDependency("../cljs/repl.js", ['cljs.repl'], ['goog.string', 'cljs.core'
 goog.addDependency("../clojure/zip.js", ['clojure.zip'], ['cljs.core']);
 goog.addDependency("../cljsjs/react-dom/development/react-dom.inc.js", ['react_dom', 'cljsjs.react.dom'], ['react'], {'foreign-lib': true});
 goog.addDependency("../reagent/dom.js", ['reagent.dom'], ['reagent.impl.util', 'reagent.impl.protocols', 'reagent.ratom', 'cljs.core', 'reagent.impl.template', 'reagent.impl.batching', 'reagent.impl.input', 'react_dom']);
-goog.addDependency("../ob/core.js", ['ob.core'], ['ob.scroll', 'ob.code_to_hiccup', 'ob.analyzer', 'ob.data_to_hiccup', 'ob.defs', 'ob.utils', 'com.rpl.specter', 'cljsjs.d3', 'cljs.pprint', 'cljs.repl', 'clojure.zip', 'goog.dom', 'reagent.core', 'reagent.dom', 're_frame.core', 'cljs.core']);
+goog.addDependency("../ob/core.js", ['ob.core'], ['ob.scroll', 'ob.code_to_hiccup', 'ob.analyzer', 'ob.data_to_hiccup', 'ob.defs', 'ob.utils', 'ob.update_db', 'ob.event_loop', 'com.rpl.specter', 'cljsjs.d3', 'cljs.pprint', 'cljs.repl', 'clojure.zip', 'goog.dom', 'reagent.core', 'reagent.dom', 're_frame.core', 'cljs.core.async', 'cljs.core']);
 goog.addDependency("../cljs/test.js", ['cljs.test'], ['cljs.core', 'cljs.pprint', 'clojure.string']);
 goog.addDependency("../figwheel/main/async_result.js", ['figwheel.main.async_result'], ['cljs.core', 'figwheel.repl']);
 goog.addDependency("../figwheel/main/testing.js", ['figwheel.main.testing'], ['goog.dom', 'cljs.core', 'cljs.test', 'clojure.string', 'figwheel.main.async_result']);

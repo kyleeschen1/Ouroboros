@@ -12,6 +12,11 @@
    
    [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
+   [ob.update-db :refer [run-db-update]]
+   [ob.event-loop]
+
+   
+
    [com.rpl.specter :as s]
 
    [cljsjs.d3]
@@ -24,9 +29,12 @@
    [reagent.core :as reagent :refer [atom]]
    [reagent.dom :as rdom]
    
-   [re-frame.core :as rf :refer [reg-sub dispatch subscribe]])
+   [re-frame.core :as rf :refer [reg-sub dispatch subscribe]]
+
+   [cljs.core.async :as a])
   
   (:require-macros
+   [cljs.core.async.macros :refer [go go-loop]]
    [com.rpl.specter :refer [defnav comp-paths]]))
 
 ;;#######################################################################
@@ -267,7 +275,7 @@
   
   [db pred-fn]
 
-  (let [dims (get-dims "rooty")
+  (let [dims (get-dims "code-col")
 
         f (fn [id style]
             
@@ -279,17 +287,49 @@
                      :left (px* (:left dims)))))]
 
 
-    (s/transform [(s/submap (keys dims)) s/MAP-VALS (s/collect-one :id) :style] f db)
+    (s/transform [(s/submap (keys dims)) s/MAP-VALS (s/collect-one :id) :style] f db)))
+
+
+
+;;#######################################################################
+;; Animations
+;;######################################################################
+
+(defmulti animate
+  
+  (fn [tag _ _]
     
-    #_(s/setval [(desc :root) (s/pred pred-fn) :style :color] "red" db)))
+    tag))
 
-(defn trsf
+(defmethod animate :add-code*
+  
+  [_ _ [code]]
+  
+  (let [ast (walk-ids code)
+        
+        data (ast->data (analyze ast {}))
+        
+        id  (:id (meta ast))]
+    
+    {:op :append
+     :id/parent id
+     :data (apply merge data)}))
 
-  [db pred-fn]
 
-  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] db))
+(defmethod animate :add-code
+  
+  [_ db code]
 
-        dims (get-dims "rooty")
+  [(animate :add-code* db code)
+   (animate :add-code* db code)])
+
+(defmethod animate :contract
+  [_ db _]
+
+  (let [db (:display db)
+        max-depth (apply max (s/select [s/MAP-VALS :depth] db))
+
+        dims (get-dims "code-col")
  
         interval (/ 10000 max-depth)
 
@@ -310,21 +350,28 @@
                      :padding-top "0px"
                      :padding-bottom "0px"
                      :padding-right "0px"
-                     :padding-left "0px")))]
+                     :padding-left "0px")))
 
-    (s/transform [s/MAP-VALS
-                  (s/collect-one :depth)
-                  (s/collect-one :class)
-                  :style] f db)))
+        data
+
+        (s/transform [s/MAP-VALS
+                      (s/collect-one :depth)
+                      (s/collect-one :class)
+                      :style] f db)]
+    
+    {:op :update
+     :data data}))
 
 
-(defn expand
 
-  [db pred-fn]
+(defmethod animate :expand
+  
+  [_ db _]
 
-  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] db))
+  (let [db (:display db)
+        max-depth (apply max (s/select [s/MAP-VALS :depth] db))
 
-        dims (get-dims "rooty")
+        dims (get-dims "code-col")
  
         interval (/ 10000 max-depth)
 
@@ -338,123 +385,36 @@
                    :padding-top nil
                    :padding-bottom nil
                    :padding-right nil
-                   :padding-left nil))]
+                   :padding-left nil))
 
-    (s/transform [s/MAP-VALS
-                  (s/collect-one :depth)
-                  (s/collect-one :id)
-                  :style] f db)))
+        data (s/transform [s/MAP-VALS
+                           (s/collect-one :depth)
+                           (s/collect-one :id)
+                           :style] f db)]
 
-
-
-
-
-(def PARA
-  
-  "Prewalks the structure, but inserts the transformed branch
-  as the first argument to the leaf nodes."
-  
-  (s/recursive-path [pred] p
-                    (s/if-path pred
-                               [(s/stay-then-continue s/DISPENSE (s/collect-one) :nodes s/ALL p)]
-                               s/STAY)))
-
-(def PARA*
-  
-  "Prewalks the structure, but inserts the transformed branch
-  as the first argument to the leaf nodes."
-  
-  (s/recursive-path [pred] p
-                    (s/if-path pred
-                               [(s/continue-then-stay :nodes s/ALL p s/VAL) ]
-                               s/STAY)))
-
-
-(defn para
-  
-  [pred f structure]
-  
-  (s/transform [(s/collect-one nil)(PARA pred)] f structure))
-
-(def code
-  (code->hiccup
-    (analyze
-     (walk-ids
     
-      '(tag expr 
-            (let [x (if (zero? 0)
-                      1
-                      2)
-                  tx [1 2 3]
-                  set (tag quote #{'a b c})
-                  y 
-                  (tag maps {:a 1
-                             :b 3
-                             :c {:e 1
-                                 :b {:g 4
-                                     :h :j
-                                     :k 7}
-                                 :f 4}})
-                  zak (tag let
-                          (+ 3 (let [y 6
-                                     z (let [y 6
-                                             a (let [y 6234567]
-                                                 h)]
-                                         "eggs")]
-                                 jowls)))]
-
-              (do
-                (+ 4 5 37)
-                (- 16 7)
-                (* 14 35)))))
-     {})))
+    {:op :update
+     :data data}))
 
 
-#_(-> (js/d3.select "#yo") (.node) (.append (.node jowls)))
 
-;;#######################################################################
-;; Add Code to DB
-;;#######################################################################
-
-(def sample-code
-  '(let [x 1
-         z (let [t (let [e r]
-                     (loop [x {:a b
-                              :c 3
-                              :b {:k 2
-                                  :c 4}}]
-                       (fn [x y]
-                         (if true
-                           3
-                           (+ 1 2)))))]
-             (do
-               3
-               4
-               5)) ]
-
-     (fn [f]
-       ((fn [x x]
-          (x x))
-        (fn [y]
-          (f (fn [z]
-               ((y y) z))))))))
+ ;;#######################################################################
+ ;; Event Handlers
+ ;;#######################################################################
 
 
-(defn code->DB
-  
-  [db code]
-  
-  (let [ast (walk-ids code)
-        
-        data (ast->data (analyze ast {}))
-        
-        id  (:id (meta ast))]
 
-   (s/setval [:root :children s/END] [id] (apply merge db data))))
+(rf/reg-event-fx
 
-;;#######################################################################
-;; Event Handlers
-;;#######################################################################
+ :run-animation
+
+ (fn [{db :db [_ tag & params] :event}]
+   
+   (let [cf (animate tag db (vec params))]
+
+     {:enqueue-animation! cf})))
+
+
 
 (def save
   
@@ -479,18 +439,6 @@
 
 
 
-
-(rf/reg-event-db
- 
- :add-code
- 
- [save]
- 
- (fn [db [_ code]]
-  
-   (update db :display code->DB code)))
-
-
 (rf/reg-event-db
 
  :undo
@@ -498,18 +446,6 @@
  (fn [db _]
 
    (:history db)))
-
-(rf/reg-event-db
- 
- :animate
-
- [save]
- 
- (fn [db [_ f & args]]
-   
-   (update db :display #(apply f % args))))
-
-
 
 
 
@@ -597,8 +533,6 @@
  (fn [db [_ trn-name]]
    
    (assoc db :trs/active-id trn-name)))
-
-
 
 
 
@@ -717,126 +651,6 @@
           
           (recur (pw-next loc) acc (inc c)))))))
 
-;;#######################################################################
-;; Hiccup Manipulation
-;;#######################################################################
-
-;; Animate:
-;;
-;; This is the interface for core Hiccup manipulations that
-;; can be composed into increasingly complex animations.
-;;
-;; Each module is responsible for:
-;; 
-;;  1) Altering the data
-;;  2) Specifying when to stop blocking for the next animation
-;;  3) Specifying how to rewind the animation
-;;
-;; To-Do: turn into protocol?
-
-(declare -animate)
-
-(defn animate
-  
-  [db [op params]]
-  
-  (let [td (get db :trs/time-dir :forward)
-        
-        data (-animate op (:display db) params)
-
-        db* (update db :display merge data)
-
-        db* (assoc db :id/version (gensym "version-"))]
-
-    {:edit/op op
-     :edit/id (gensym "edit/")
-     :params params
-     :n-rows (count data)
-     :db db
-     :db* db*}))
-
-
-;;-----------------------------------
-;; The Great Declaration Itself...
-;;-----------------------------------
-
-(defmulti -animate
-  
-  (fn [op db params]
-
-    op))
-
-;;-----------------------------------
-;; Appending
-;;-----------------------------------
-
-(defmethod -animate :append
-  
-  [_ db {:keys [code]}]
-
-  (let [ast (walk-ids code)
-        
-        data (ast->data (analyze ast {}))
-
-        ;; Get local root id of current dataset
-        local-root-id  (:id (meta ast))
-
-        ;; Update database
-        data (apply merge db data)
-
-        ;; Append the local root id to the children of root
-        root* (s/select :root
-                        (s/setval [:root :children s/END]
-                                  [local-root-id]
-                                  db))]
-
-    (merge root* data)))
-
-
-
-;;-----------------------------------
-;; Removing
-;;-----------------------------------
-
-(defmethod -animate :remove
-  [_ _ _]
-  )
-
-;;-----------------------------------
-;; Substitution
-;;-----------------------------------
-
-(defmethod -animate :substitute
-  [_ _ _]
-  )
-
-
-;;-----------------------------------
-;; Copying
-;;-----------------------------------
-
-(defmethod -animate :copy
-  [_ _ _]
-  )
-
-
-;;-----------------------------------
-;; Modifying
-;;-----------------------------------
-
-(defmethod -animate :modify
-  [_ _ _]
-  )
-
-;;-----------------------------------
-;; Transitions
-;;-----------------------------------
-
-(defmethod -animate :transition
-  [_ _ _]
-  )
-
-
 
 
 
@@ -844,19 +658,21 @@
 ;; Initializing
 ;;#######################################################################
 
-(rf/reg-event-db
+(rf/reg-event-fx
 
  :initialize
 
  (fn [_ _]
 
-   (merge (init-trs)
-          
-          
-          {:code {:root {:op :root
-                         :id :root
-                         :pos-type :root
-                         :children []}}})))
+   {:init-event-loop! nil
+    
+    :db (merge (init-trs)
+               
+               
+               {:display {:root {:op :root
+                              :id :root
+                              :pos-type :root
+                              :children []}}})}))
 
 (defn init
   []
@@ -889,6 +705,30 @@
 ;; Main Page
 ;;#######################################################################
 
+
+(def sample-code
+  '(let [x 1
+         z (let [t (let [e r]
+                     (loop [x {:a b
+                              :c 3
+                              :b {:k 2
+                                  :c 4}}]
+                       (fn [x y]
+                         (if true
+                           3
+                           (+ 1 2)))))]
+             (do
+               3
+               4
+               5)) ]
+
+     (fn [f]
+       ((fn [x x]
+          (x x))
+        (fn [y]
+          (f (fn [z]
+               ((y y) z))))))))
+
 (defn text-col
   
   [state]
@@ -904,15 +744,17 @@
    
    [:p.expo "Next line"]
  
-   [:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
+   ;;[:button {:on-click #(>evt [:add-code sample-code])} "Add Code"]
+
+   [:button {:on-click #(>evt [:run-animation :add-code sample-code])} "Add code"]
    
    [:br]
 
-   [:button {:on-click #(>evt [:animate trsf (fn [n] (= :symbol (:op n)))])} "Contract"]
+   [:button {:on-click #(>evt [:run-animation :contract])} "Contract"]
 
    [:br]
    
-   [:button {:on-click #(>evt [:animate expand])} "Expand"]
+   [:button {:on-click #(>evt [:run-animation :expand])} "Expand"]
 
    [:br]
    
@@ -935,7 +777,8 @@
             :overflow "scroll"
             :border "solid 2px white"})
    
-   [:div#rooty 
+   [:div#code-col
+    
     [render :root nil]]])
 
 (defn main-page
@@ -1075,119 +918,6 @@
                    ;;:position "absolute"
                    :color "red"}}
      "Jowls"]]
-
-
-
-
-
-(comment
-
-  (And animation returns a map with
-       (Ids affected)
-       (One transition function for delay, duration, ease, etc.
-            (takes in current time preference))
-       (One function for affected data)
-       (Name))
-
-  (Running animation
-           (counts affected ids)
-           (attaches on-end handler that will count when event finishes)
-           (dispatches next event on queue if any))
-  
-  (History is saved
-           (By event Id name)
-           (Saves data, init time, times it completed, etc.)
-           (To rewind
-               (time to completion is subtracted from max time)
-               (that becomes the new delay))
-           ()))
-
-;;#######################################################################
-;; Planning
-;;#######################################################################
-
-
-(comment
-
-  Flow
-
-
-  (To Do
-      (- Indexer
-         
-         - Chains parent and child ids
-         
-         - Standard collection / token tag
-         
-         - Adds rendering meta-data
-         
-         - Adds parens
-         
-         - Labels collection types
-         
-         - Adds tags
-
-         (Canonical Names
-                    (render-id, render-child-ids)
-                    ()))
-      
-      (- Analyzer
-
-         - Takes in rendering tree and creates
-         entirely new tree with all sorts of metadata)
-
-      (- Registering data
-
-         (reg-data tag & args)
-         (this allows the data and the AST to be stored in the same place)
-         (to render
-             (render target instance-tag & data-tags)
-             ()))
-
-      (- Rendering
-
-         - Takes in indexed tree, merges it with data
-         from the analyzer, and adds it to some index
-         (root by default)
-
-         - Multimethods (data (takes in AST, Indexed Tree), positioning))
-      
-      (- Standard Animations
-
-         - Copy (re-index ids)
-         - Add absolute-position
-         - Gather to parent
-         - Contract
-         - Insert square of the same size
-         - Shrink / Grow
-         - Collapse column (all but one))
-
-      (- Other structures
-         
-         - Outline
-         - Equation)
-
-      
-      (- Events
-
-         - Try out simple queing system
-
-         (- Multimethod
-            (Takes in id, text, and action)
-            (Adds all text to display column, adds id)
-            ()))))
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1432,3 +1162,62 @@
                         (collapse false)
                         
                         (copy false)))))))))
+
+
+
+
+;;#######################################################################
+;; Add Code to DB
+;;#######################################################################
+
+
+
+
+(defn code->DB
+  
+  [db code]
+  
+  (let [ast (walk-ids code)
+        
+        data (ast->data (analyze ast {}))
+        
+        id  (:id (meta ast))]
+
+    (s/setval [:root :children s/END] [id] (apply merge db data))))
+
+
+
+
+
+
+
+
+(def PARA
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/stay-then-continue s/DISPENSE (s/collect-one) :nodes s/ALL p)]
+                               s/STAY)))
+
+(def PARA*
+  
+  "Prewalks the structure, but inserts the transformed branch
+  as the first argument to the leaf nodes."
+  
+  (s/recursive-path [pred] p
+                    (s/if-path pred
+                               [(s/continue-then-stay :nodes s/ALL p s/VAL) ]
+                               s/STAY)))
+
+
+(defn para
+  
+  [pred f structure]
+  
+  (s/transform [(s/collect-one nil)(PARA pred)] f structure))
+
+
+#_(-> (js/d3.select "#yo") (.node) (.append (.node jowls)))
