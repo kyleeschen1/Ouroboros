@@ -69,12 +69,16 @@
   
   (update db :display merge data))
 
+(def history
+  (atom nil))
 
 (defmethod update-db :revert
   
-  [_ {:keys [history]}]
-  
-  history)
+  [_ _]  
+
+  (let [prev (peek @history)]
+    (swap! history pop)
+    prev))
 
 ;;#######################################################################
 ;; Logging History
@@ -93,8 +97,9 @@
   
   [cf db db*]
   
-  (if (= false (:save? cf))
+  (when-not (= false (:save? cf)) 
     
-    db*
-    
-    (assoc db* :history db)))
+    (swap! history conj db))
+
+  (println (count @history))
+  db*)

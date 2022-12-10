@@ -13,9 +13,7 @@
    [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
 
    [ob.update-db :refer [run-db-update]]
-   [ob.event-loop :refer [animate animate!]]
-
-   
+   [ob.event-loop :refer [animate animate! paused? pause!]]
 
    [com.rpl.specter :as s]
 
@@ -321,6 +319,7 @@
 
 
 (defmethod animate :contract
+  
   [_ db _]
 
   (let [db (:display db)
@@ -345,11 +344,15 @@
                    :padding-right "0px"
                    :padding-left "0px"))
 
+        add-on (fn [data]
+                 (assoc data :on-transition-end #(println (.now js/Date))))
+
         data
 
         (s/transform [s/MAP-VALS
                       (s/collect-one :depth)
                       (s/collect-one :class)
+                     ;; (s/view add-on)
                       :style] f db)]
     
     {:op :update
@@ -388,6 +391,7 @@
 
     
     {:op :update
+     :time 10000
      :data data}))
 
 
@@ -735,7 +739,7 @@
    
    [:br]
    
-   [:button {:on-click #(>evt [:pause!])} "||"]
+   [:button {:on-click pause!} "||"]
    
    [:br]
    

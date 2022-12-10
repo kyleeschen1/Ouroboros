@@ -6,14 +6,14 @@
    [ob.utils :refer [<sub >evt]]
    
    [cljs.core.async :as a]
-   [re-frame.core :as rf :refer [reg-sub dispatch subscribe]])
+   [re-frame.core :as rf])
   
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]))
 
 
 ;;#######################################################################
-;; Animate Multimethod
+;; Event Multimethod
 ;;#######################################################################
 
 
@@ -24,36 +24,56 @@
     tag))
 
 
+(defn events->updates
+
+  "Compiles events into a flat vector
+   of db updates."
+  
+  [tag db params]
+  
+  (let [cf (animate tag db (vec params))
+
+        configs (if (vector? cf)
+                   cf
+                   [cf])]
+
+    configs))
+
+
 ;;#######################################################################
 ;; Animation Handlers
 ;;#######################################################################
 
 
-(def paused?
-  (atom false))
 
-(def requests
+
+;;#######################################################################
+;; Event Loop
+;;#######################################################################
+
+(declare block-event-loop
+         unblock-event-loop
+         paused?)
+
+;;------------------------------
+;; Event Channel
+;;------------------------------
+
+(def events
   (a/chan))
-
 
 (defn animate!
 
-  "Puts an animation request onto
-   the event channel."
+  "Puts an animation on the
+   event channel."
 
   [& args]
 
-  (a/put! requests (vec args)))
+  (a/put! events (vec args)))
 
-(defn block
-  
-  [{:keys [time]}]
-  
-  (a/timeout (or time
-                 (<sub [:standard-block]))))
-
-
-(declare process-request)
+;;------------------------------
+;; Core Loop
+;;------------------------------
 
 (defn run-event-loop!
 
@@ -64,120 +84,117 @@
   
   (go-loop []
 
-    (let [rq (a/<! requests)]
+    (let [event (a/<! events)]
       
-      (a/<! (process-request rq))
+      (>evt (into [:events->updates] event))
+
+      (a/<! block-event-loop)
       
       (recur))))
 
-(defn process-request
+;;----------------------------------
+;; Async
+;;----------------------------------
 
-  "Processes a request, providing a
-   channel that will block until completion."
-  
-  [evt]
+(def block-event-loop
+  (a/chan))
 
-  (let [c (a/chan)]
-    
-    (>evt (into [:run-animation c] evt))
+(defn unblock-event-loop!
+  []
+  (a/put! block-event-loop :unleash-the-next-terror))
 
-    c))
+;;#######################################################################
+;; Sequencing DB Updates
+;;#######################################################################
 
+(declare block-db-update-queue
+         unblock-db-update-queue
+         block)
 
-(defn execute-animation-request
+(defn queue-db-updates!
 
-  "Takes in the db and a channel / animation
-   request pair, then:
- 
-   1) computes a sequence of hiccup updates
-   2) applies each update, blocking between
+  "Takes in a sequence of db updates,
+   dispatches each for for execution,
+   blocking between if appropriate.
 
-   Once everything has been processed, it closes
-   the provided channel."
+   Once everything has been processed,
+   it unblocks the event loop."
 
-  [{db :db [_ channel tag & params] :event}]
+  [updates]
    
-   (let [cf (animate tag db (vec params))
+   (go-loop [[u & us] updates]
+     
+     (when u
+       
+       (if @paused?
 
-         configs (if (vector? cf)
-                   cf
-                   [cf])]
-
-     (go-loop [[c & cs :as configs] configs]
-
-       (cond
-
-         @paused?
-         (do         
-           (a/<! (a/timeout 100))       
-           (recur configs))
-
-         (not (seq configs))
-         (a/close! channel)
-
-         :else
+         (do           
+           (a/<! (a/timeout 100))           
+           (recur updates))
+         
          (do
+           (>evt [:run-db-update u])  
+           (a/<! (block u))  
+           (recur us))))
 
-           (>evt [:update-db c])
-           
-           (a/<! (block c))
-           
-           (recur cs))))))
+     (unblock-event-loop!)))
 
+;;----------------------------------
+;; Async
+;;----------------------------------
 
-(rf/reg-event-fx
+(def block-db-update-queue
+  (a/chan))
 
- :run-animation
+(defn unblock-db-update-queue
+  []
+  )
 
- execute-animation-request)
-
-
-
+(defn block
+  
+  [{:keys [time]}]
+  
+  (a/timeout (or time 1000)))
 
 ;;#######################################################################
 ;; Re-Frame Registrations
 ;;#######################################################################
 
-(rf/reg-fx
-
- :init-event-loop!
-
- (fn [_]
-   
-   (run-event-loop!)))
+(rf/reg-fx :init-event-loop!
+           run-event-loop!)
 
 
-(rf/reg-event-db
+(rf/reg-event-fx
 
- :update-db
+ :events->updates
 
- run-db-update)
+ (fn [{:keys [db]} [_ tag & params]]
+
+   (let [events (events->updates tag db params)]
+
+     {:queue-db-updates! events})))
+
+
+(rf/reg-fx :queue-db-updates!           
+           queue-db-updates!)
+
+(rf/reg-event-db :run-db-update               
+                 run-db-update)
 
 
 ;;#######################################################################
-;; Pausing and Blocking
+;; Pausing and Timing
 ;;#######################################################################
 
-(rf/reg-event-db
+(def paused?
+  (atom false))
 
- :pause!
+(defn pause!
+  []
+  (swap! paused? not))
 
- (fn [db _]
-   
-   (update db :paused? not)))
 
-(rf/reg-sub
- 
- :paused?
- 
- (fn [{:keys [paused?]}]
-   
-   paused?))
 
-(rf/reg-sub
- 
- :standard-block
- 
- (fn [{:keys [standard-block]}]
-   
-   standard-block))
+
+
+
