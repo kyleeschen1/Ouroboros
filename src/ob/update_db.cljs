@@ -1,7 +1,11 @@
 
 (ns ^:figwheel-hooks ob.update-db
+  
   (:require
-   [com.rpl.specter :as s]))
+   [com.rpl.specter :as s])
+   
+  (:require-macros
+   [com.rpl.specter :refer [defnav comp-paths]]))
 
 ;;#######################################################################
 ;; Updating the Database
@@ -13,43 +17,8 @@
 
 
 (declare update-db
-         log-history)
-
-(defn handle-trs
-  
-  [{:keys [trs data] :as cf}]
-  
-  (let [trs-log (atom {})
-
-        log! (fn [id dur delay]
-               (let [trs-attrs {id {:dur dur
-                                    :delay delay
-                                    :total (+ dur delay)}}]
-                 (swap! trs-log merge trs-attrs)))
-
-        format-trs (fn [styles dur delay]
-                        (-> styles
-                            (dissoc :trs)
-                            (assoc :transition-duration (when dur (str dur "s")))
-                            (assoc :transition-delay (when delay (str delay "s")))))
-
-        process-trs (fn [id {:keys [trs] :as styles}]
-                            (let [{:keys [dur delay]} trs]
-                              (log! id dur delay)
-                              (format-trs styles dur delay)))
-        
-        
-        data (s/transform [s/MAP-VALS (s/collect :id) :style (s/pred :trs)]
-                          process-trs
-                          data)
-
-        max-time (apply max (s/select [s/MAP-VALS :total] @trs-log))]
-
-    (println (str "Max Time::" max-time))
-
-    (assoc cf
-           :time max-time
-           :data data)))
+         log-history
+         process-trs)
 
 (defn run-db-update
 
@@ -62,7 +31,7 @@
   [db cf]
   
   (let [cf (if (:trs? cf)
-             (handle-trs cf)
+             (process-trs cf)
              cf)
         
         db* (update-db cf db)
@@ -145,3 +114,79 @@
 
   (println (count @history))
   db*)
+
+
+
+;;#######################################################################
+;; Transitions
+;;#######################################################################
+
+(defn process-trs
+  
+  [{:keys [trs data] :as cf}]
+  
+  (let [trs-log (atom {})
+
+        log! (fn [id dur delay]
+               
+               (let [trs-attrs {:dur dur
+                                :delay delay
+                                :total (+ dur delay)}]
+                 
+                 (swap! trs-log merge {id trs-attrs})))
+
+        format-trs (fn [styles dur delay]
+                        (-> styles
+                            (dissoc :trs)
+                            (assoc :transition-duration (when dur (str dur "s")))
+                            (assoc :transition-delay (when delay (str delay "s")))))
+
+        process-trs (fn [id {:keys [trs] :as styles}]
+                      
+                      (let [{:keys [dur delay]} trs]
+                        
+                        (log! id dur delay)
+                        
+                        (format-trs styles dur delay)))
+        
+        
+        data (s/transform [s/MAP-VALS (s/collect :id) :style (s/pred :trs)]
+                          process-trs
+                          data)
+
+        max-time (apply max (s/select [s/MAP-VALS :total] @trs-log))]
+
+    (assoc cf
+           :time max-time
+           :data data)))
+
+(defnav current-db
+
+  []
+  
+  (select* [_ db next-fn]
+           (let [{id :id/db} db]
+             (next-fn (get-in db [:db-versions id]))))
+
+  (transform* [_ db next-fn]
+           (let [{id :id/db} db]
+              (update-in db [:db-versions id] next-fn))))
+
+
+#_(comment
+
+  (defn db-get-current-version
+    [(s/collect :current-db-version-id) ])
+
+  {:current-db-version-id :root
+   :db-versions {:root {:prev-version nil
+                        :current-version :root
+                        :next-version nil
+                        }
+                 version-id-1 {:prev-version :root
+                               :current-version version-id-1
+                               :next-version version-id-2
+                               :display nil}
+                 version-id-2 {d e}}
+
+   })
