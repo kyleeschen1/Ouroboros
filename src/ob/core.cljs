@@ -306,6 +306,7 @@
     
     {:op :append
      :id/parent id
+     :time 1
      :data (apply merge data)}))
 
 
@@ -333,8 +334,8 @@
         f (fn [depth classes style]
 
             (assoc style
-                   :transition-duration "4s"
-                   :transition-delay (str (* (- max-depth depth) interval) "ms")
+                   :trs {:dur 4
+                         :delay (/ (* (- max-depth depth) interval) 1000)}
                    
                    ;; :top (px* 500)
                    ;;  :left (px* 500)
@@ -350,13 +351,13 @@
         data
 
         (s/transform [s/MAP-VALS
-                      (s/collect-one :depth)
+                     (s/collect-one :depth)
                       (s/collect-one :class)
                      ;; (s/view add-on)
                       :style] f db)]
     
     {:op :update
-     :time 10000
+     :trs? true
      :data data}))
 
 
@@ -375,8 +376,8 @@
         f (fn [depth id style]
 
             (assoc style
-                   :transition-duration "4s"
-                   :transition-delay (str (* depth interval) "ms")
+                   :transition-duration 4
+                   :transition-delay (/  (* depth interval) 1000)
                   
                    :font-size nil
                    :padding-top nil
@@ -391,7 +392,7 @@
 
     
     {:op :update
-     :time 10000
+     :trs? true
      :data data}))
 
 

@@ -107,10 +107,6 @@
 ;; Sequencing DB Updates
 ;;#######################################################################
 
-(declare block-db-update-queue
-         unblock-db-update-queue
-         block)
-
 (defn queue-db-updates!
 
   "Takes in a sequence of db updates,
@@ -132,29 +128,12 @@
            (a/<! (a/timeout 100))           
            (recur updates))
          
-         (do
-           (>evt [:run-db-update u])  
-           (a/<! (block u))  
+         (let [block (a/chan)]
+           (>evt [:run-db-update block u])
+           (a/<! block)
            (recur us))))
 
      (unblock-event-loop!)))
-
-;;----------------------------------
-;; Async
-;;----------------------------------
-
-(def block-db-update-queue
-  (a/chan))
-
-(defn unblock-db-update-queue
-  []
-  )
-
-(defn block
-  
-  [{:keys [time]}]
-  
-  (a/timeout (or time 1000)))
 
 ;;#######################################################################
 ;; Re-Frame Registrations
@@ -175,11 +154,33 @@
      {:queue-db-updates! events})))
 
 
-(rf/reg-fx :queue-db-updates!           
+(rf/reg-fx :queue-db-updates!
+           
            queue-db-updates!)
 
-(rf/reg-event-db :run-db-update               
-                 run-db-update)
+(rf/reg-event-fx
+ 
+ :run-db-update
+
+ (fn [{:keys [db]} [_ blocking-chan update]]
+   
+   (let [{:keys [db time]} (run-db-update db update)]
+     
+     {:db db
+      :block-for-db-update [time blocking-chan]})))
+
+
+(rf/reg-fx
+
+ :block-for-db-update
+
+ (fn [[time blocking-channel]]
+
+   (go
+     (a/<! (a/timeout (* 1000 (or time 0.02))))
+     (a/close! blocking-channel))))
+
+
 
 
 ;;#######################################################################
