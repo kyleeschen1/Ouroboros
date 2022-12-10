@@ -2,10 +2,11 @@
 (ns ^:figwheel-hooks ob.update-db
   
   (:require
+   [ob.db-nav :refer [CURR-DB PREV-DB NEXT-DB]]
    [com.rpl.specter :as s])
    
   (:require-macros
-   [com.rpl.specter :refer [defnav comp-paths]]))
+   [com.rpl.specter :refer [multi-transform]]))
 
 ;;#######################################################################
 ;; Updating the Database
@@ -31,13 +32,24 @@
   [db cf]
   
   (let [cf (if (:trs? cf)
-             (process-trs cf)
+             (process-trs cf (:trs-speed db))
              cf)
         
-        db* (update-db cf db)
+        new-version (update-db cf (s/select-one [CURR-DB] db))
 
-        db* (log-history cf db db*)]
+        prev-db-id (:id/curr-db db)
+        curr-db-id (keyword (gensym "version-"))
 
+        new-version (merge new-version {:id/prev-db prev-db-id
+                                        :id/curr-db curr-db-id})
+
+   
+
+        db* (-> (assoc db :id/curr-db curr-db-id)
+                (assoc-in [:db-versions prev-db-id :id/next-db] curr-db-id)
+                (assoc-in [:db-versions curr-db-id] new-version))]
+
+    (println (:id/curr-db db))
     {:db db*
      :time (:time cf)}))
 
@@ -123,7 +135,7 @@
 
 (defn process-trs
   
-  [{:keys [trs data] :as cf}]
+  [{:keys [trs data] :as cf} trs-anchor]
   
   (let [trs-log (atom {})
 
@@ -138,12 +150,13 @@
         format-trs (fn [styles dur delay]
                         (-> styles
                             (dissoc :trs)
-                            (assoc :transition-duration (when dur (str dur "s")))
-                            (assoc :transition-delay (when delay (str delay "s")))))
+                            (assoc :transition-duration (when dur (str dur "ms")))
+                            (assoc :transition-delay (when delay (str delay "ms")))))
 
         process-trs (fn [id {:keys [trs] :as styles}]
                       
-                      (let [{:keys [dur delay]} trs]
+                      (let [{:keys [dur delay]} trs
+                            [dur delay] (mapv #(* trs-anchor %) [dur delay])]
                         
                         (log! id dur delay)
                         
@@ -160,33 +173,10 @@
            :time max-time
            :data data)))
 
-(defnav current-db
-
-  []
-  
-  (select* [_ db next-fn]
-           (let [{id :id/db} db]
-             (next-fn (get-in db [:db-versions id]))))
-
-  (transform* [_ db next-fn]
-           (let [{id :id/db} db]
-              (update-in db [:db-versions id] next-fn))))
 
 
-#_(comment
 
-  (defn db-get-current-version
-    [(s/collect :current-db-version-id) ])
 
-  {:current-db-version-id :root
-   :db-versions {:root {:prev-version nil
-                        :current-version :root
-                        :next-version nil
-                        }
-                 version-id-1 {:prev-version :root
-                               :current-version version-id-1
-                               :next-version version-id-2
-                               :display nil}
-                 version-id-2 {d e}}
 
-   })
+
+

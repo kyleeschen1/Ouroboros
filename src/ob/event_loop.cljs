@@ -1,15 +1,19 @@
 
 (ns ^:figwheel-hooks ob.event-loop
   (:require
-   
+
+   [ob.db-nav :as db]
    [ob.update-db :refer [run-db-update]]
    [ob.utils :refer [<sub >evt]]
+
+   [com.rpl.specter :as s]
    
    [cljs.core.async :as a]
    [re-frame.core :as rf])
   
   (:require-macros
    [cljs.core.async.macros :refer [go go-loop]]))
+
 
 
 ;;#######################################################################
@@ -29,9 +33,10 @@
   "Compiles events into a flat vector
    of db updates."
   
-  [tag db params]
+  [tag display-data params]
   
-  (let [cf (animate tag db (vec params))
+  (let [cf (animate tag display-data (vec params))
+      
 
         configs (if (vector? cf)
                    cf
@@ -149,7 +154,8 @@
 
  (fn [{:keys [db]} [_ tag & params]]
 
-   (let [events (events->updates tag db params)]
+   (let [display (s/select-one [db/CURR-DB :display] db)
+         events (events->updates tag display params)]
 
      {:queue-db-updates! events})))
 
@@ -177,7 +183,7 @@
  (fn [[time blocking-channel]]
 
    (go
-     (a/<! (a/timeout (* 1000 (or time 0.02))))
+     (a/<! (a/timeout (or time 20)))
      (a/close! blocking-channel))))
 
 

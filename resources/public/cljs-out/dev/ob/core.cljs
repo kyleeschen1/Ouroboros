@@ -1,6 +1,7 @@
 (ns ^:figwheel-hooks ob.core
   (:require
 
+   [ob.db-nav :as db]
    [ob.scroll :refer [set-scroll-trigger]]
    [ob.code-to-hiccup :refer [code->hiccup]]
    
@@ -323,11 +324,9 @@
   
   [_ db _]
 
-  (let [db (:display db)
+  (let [
         
         max-depth (apply max (s/select [s/MAP-VALS :depth] db))
-
-        dims (get-dims "code-col")
  
         interval (/ 10000 max-depth)
 
@@ -336,17 +335,12 @@
             (assoc style
                    :trs {:dur 4
                          :delay (/ (* (- max-depth depth) interval) 1000)}
-                   
-                   ;; :top (px* 500)
-                   ;;  :left (px* 500)
                    :font-size "0px"
                    :padding-top "0px"
                    :padding-bottom "0px"
                    :padding-right "0px"
                    :padding-left "0px"))
 
-        add-on (fn [data]
-                 (assoc data :on-transition-end #(println (.now js/Date))))
 
         data
 
@@ -366,19 +360,19 @@
   
   [_ db _]
 
-  (let [db (:display db)
+  (let [
         max-depth (apply max (s/select [s/MAP-VALS :depth] db))
-
-        dims (get-dims "code-col")
  
         interval (/ 10000 max-depth)
 
         f (fn [depth id style]
 
             (assoc style
-                   :transition-duration 4
-                   :transition-delay (/  (* depth interval) 1000)
-                  
+
+                   :trs {:dur 4
+                         :delay (/  (* depth interval) 1000)}
+                   
+             
                    :font-size nil
                    :padding-top nil
                    :padding-bottom nil
@@ -402,20 +396,35 @@
  ;;#######################################################################
 
 
+(rf/reg-sub
+
+ :current-db
+
+ (fn [db _]
+   
+   (s/select-one db/CURR-DB db)))
 
 
+(rf/reg-sub
 
+ :current-display
 
+ :<- [:current-db]
+
+ (fn [db]
+
+   (get db :display)))
 
 
 (rf/reg-sub
 
  :id->data
- 
- (fn [{:keys [display]} [_ id]]
- 
-   (get display id)))
 
+ :<- [:current-display]
+ 
+ (fn [display [_ id]]
+   
+   (get display id)))
 
 
 (rf/reg-event-db
@@ -635,23 +644,44 @@
 ;; Initializing
 ;;#######################################################################
 
+(rf/reg-event-db
+
+ :jowls
+
+ (fn [db _]
+   (update db :jowls #(str % "s"))))
+
+(rf/reg-sub
+
+ :jowls-return
+
+ (fn [db _]
+   (get db :jowls)))
+
+(def init-display
+
+  {:root {:op :root
+          :id :root
+          :pos-type :root
+          :children []}})
+
 (rf/reg-event-fx
 
  :initialize
 
  (fn [_ _]
 
-   {:init-event-loop! nil
-    
-    :db (merge (init-trs)
-
-               {:standard-block 3000
-                :paused? false}
+   (let [db (merge  db/init-db
                
-               {:display {:root {:op :root
-                              :id :root
-                              :pos-type :root
-                              :children []}}})}))
+               {:standard-block 3000
+                :trs-speed 200
+                :paused? false})
+
+         db (s/setval [db/CURR-DB :display] init-display db)]
+
+     {:init-event-loop! nil
+      
+      :db db})))
 
 (defn init
   []
@@ -736,7 +766,18 @@
 
    [:br]
    
-   [:button {:on-click #(>evt [:update-trs :yams])} "Init"] 
+   [:button {:on-click #(>evt [:update-trs :yams])} "Init"]
+
+   [:br]
+
+   [:h2 "Animation Speed"]
+   [:input {:type :range
+            :min 0
+            :max 400
+            :value (<sub [:trs-speed-slider-val])
+            :on-change #(>evt [:update-trs-speed (.. % -target -value)])}]
+   
+   [:br]
    
    [:br]
    
@@ -746,6 +787,22 @@
    
    [:button {:on-click #(>evt [:undo])} "Undo"]])
 
+
+(rf/reg-event-db
+
+ :update-trs-speed
+
+ (fn [db [_ speed]]
+   
+   (assoc db :trs-speed speed)))
+
+(rf/reg-sub
+
+ :trs-speed-slider-val
+
+ (fn [db _]
+
+   (get db :trs-speed)))
 
 
 
