@@ -6,7 +6,7 @@
    [com.rpl.specter :as s])
    
   (:require-macros
-   [com.rpl.specter :refer [defnav comp-paths]]))
+   [com.rpl.specter :refer [defnav]]))
 
 
 
@@ -15,34 +15,19 @@
 ;;#######################################################################
 
 (def init-db
-  {:id/curr-db :root
-   :db-versions {:root {:prev nil
-                        :id/curr-db :root
-                        :display {:root {:op :root
-                                         :id :root
-                                         :pos-type :root
-                                         :children []}}}}})
+  
+  {:id/curr-db :init
+   :db-versions {:root {:id/prev-db nil
+                        :id/curr-db :init
+                        :id/next-db nil}}})
+
 
 
 ;;#######################################################################
 ;; DB Navigator
 ;;#######################################################################
 
-;; Facilitates navigation to the current version of the database.
-
-
-
-#_(defnav CURR-DB
-
-  []
-
-  (select* [_ db next-fn]
-           (next-fn (get-in db [:db-versions (:id/curr-db db)])))
-
-  (transform* [_ db next-fn]
-              (update-in db [:db-versions (:id/curr-db db)] next-fn)))
-
-
+;; Facilitates navigation to different versions of the database.
 
 (defnav db-by-abs-idx
 
@@ -59,6 +44,7 @@
 
 
 
+;; Navigation to a version relative to the current one.
 
 (defnav db-by-rel-idx
   

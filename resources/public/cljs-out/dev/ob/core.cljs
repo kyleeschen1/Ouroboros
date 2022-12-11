@@ -3,7 +3,6 @@
 
    [ob.db-nav :as db]
    [ob.scroll :refer [set-scroll-trigger]]
-   [ob.code-to-hiccup :refer [code->hiccup]]
    
    [ob.analyzer :refer [analyze]]
    
@@ -11,10 +10,9 @@
 
    [ob.defs :refer [def* get-defs]]
    
-   [ob.utils :refer [assoc-meta walk-ids <sub >evt]]
+   [ob.utils :refer [walk-ids <sub >evt]]
 
-   [ob.update-db :refer [run-db-update]]
-   [ob.event-loop :refer [animate animate! paused? pause!]]
+   [ob.event-loop :refer [animate animate!]]
 
    [com.rpl.specter :as s]
 
@@ -28,12 +26,9 @@
    [reagent.core :as reagent :refer [atom]]
    [reagent.dom :as rdom]
    
-   [re-frame.core :as rf :refer [reg-sub dispatch subscribe]]
-
-   [cljs.core.async :as a])
+   [re-frame.core :as rf :refer [reg-sub dispatch subscribe]])
   
   (:require-macros
-   [cljs.core.async.macros :refer [go go-loop]]
    [com.rpl.specter :refer [defnav comp-paths]]))
 
 ;;#######################################################################
@@ -294,100 +289,99 @@
 ;;######################################################################
 
 
+(defmethod animate :rewind
+  [_ _ _]
+  {:op :prev})
 
-(defmethod animate :add-code*
+(defn get-trs-data
+
+  [data f]
+
+  (let [f* (fn [datum] 
+             (let [trs (f datum)]
+                (assoc trs :total (+ (:dur trs)(:delay trs)))))
+        
+        trs-data (s/transform [s/MAP-VALS] f* data)
+
+        max-time (apply max (s/select [s/MAP-VALS :total] trs-data))]
+
+    {:data trs-data
+     :time max-time}))
+
+(defn update-styles
+
+  [data f]
+
+  (let [f* (fn [datum]
+             (update datum :style merge (f datum)))]
+
+    (s/transform [s/MAP-VALS] f* data)))
+
+(defmethod animate :add-code
   
   [_ _ [code]]
   
   (let [ast (walk-ids code)
         
-        data (ast->data (analyze ast {}))
+        data (apply merge (ast->data (analyze ast {})))
         
         id  (:id (meta ast))]
     
     {:op :append
      :id/parent id
      :time 1
-     :data (apply merge data)}))
+     :data data}))
 
 
-(defmethod animate :add-code
+
+
+(defmethod animate :contract*
   
-  [_ db code]
+  [_ data {:keys [size delay-fn]}]
 
-  [(animate :add-code* db code)
-   (animate :add-code* db code)])
+  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] data))
+        
+        interval (/ 10 max-depth)
+        
+        data (update-styles data (fn [_]
+                                   {:font-size size
+                                    :padding-top size
+                                    :padding-bottom size
+                                    :padding-right size
+                                    :padding-left size}))
 
+        trs (get-trs-data data
+                          (fn [{:keys [depth]}]
+                            {:dur 4
+                             :delay (delay-fn max-depth depth interval)}))]
+
+    
+    {:op :update
+     :trs trs
+     :data data}))
 
 
 (defmethod animate :contract
+  [_ data _]
   
-  [_ db _]
-
-  (let [
-        
-        max-depth (apply max (s/select [s/MAP-VALS :depth] db))
- 
-        interval (/ 10000 max-depth)
-
-        f (fn [depth classes style]
-
-            (assoc style
-                   :trs {:dur 4
-                         :delay (/ (* (- max-depth depth) interval) 1000)}
-                   :font-size "0px"
-                   :padding-top "0px"
-                   :padding-bottom "0px"
-                   :padding-right "0px"
-                   :padding-left "0px"))
-
-
-        data
-
-        (s/transform [s/MAP-VALS
-                     (s/collect-one :depth)
-                      (s/collect-one :class)
-                     ;; (s/view add-on)
-                      :style] f db)]
-    
-    {:op :update
-     :trs? true
-     :data data}))
-
-
+  (animate :contract*
+           
+           data
+           
+           {:size "0px"
+            :delay-fn (fn [max-depth depth interval]
+                        (/ (- max-depth depth) interval))}))
 
 (defmethod animate :expand
+  [_ data _]
   
-  [_ db _]
-
-  (let [
-        max-depth (apply max (s/select [s/MAP-VALS :depth] db))
- 
-        interval (/ 10000 max-depth)
-
-        f (fn [depth id style]
-
-            (assoc style
-
-                   :trs {:dur 4
-                         :delay (/  (* depth interval) 1000)}
-                   
-             
-                   :font-size nil
-                   :padding-top nil
-                   :padding-bottom nil
-                   :padding-right nil
-                   :padding-left nil))
-
-        data (s/transform [s/MAP-VALS
-                           (s/collect-one :depth)
-                           (s/collect-one :id)
-                           :style] f db)]
-
-    
-    {:op :update
-     :trs? true
-     :data data}))
+  (animate :contract*
+           
+           data
+           
+           {:size nil
+            :delay-fn (fn [_ depth interval]
+                        (* depth interval))}))
 
 
 
@@ -434,94 +428,6 @@
  (fn [db _]
 
    (:history db)))
-
-
-
-
-;;#######################################################################
-;; Transition Logic
-;;#######################################################################
-
-
-;; Gives the id of the active transition 
-
-(rf/reg-sub
-
- :active-trs-id
-
- (fn [db _]
-   
-   (get db :trs/active-id)))
-
-
-;; Gives the current time direction
-;; Ex: :forward, :backward
-
-(rf/reg-sub
-
- :time-dir
-
- (fn [db _]
-   
-   (get db :trs/time-dir)))
-
-;; Gives the transaction records
-
-(rf/reg-sub
-
- :trs-records
-
- (fn [db _]
-   
-   (get db :trs/records)))
-
-
-
-;; Returns records for the active transitions
-(rf/reg-sub
-
- :active-trs-records
-
- :<- [:trs-records]
- :<- [:active-trs-id]
- :<- [:time-dir]
- 
- (fn [[records active-id time-dir] _]
-   
-   (get-in records [active-id time-dir])))
-
-;; Returns all active transitions for the id
-(rf/reg-sub
-
- :id->trs
-
- :<- [:active-trs-records]
-
- (fn [records [_ id]]
-
-   (get records id)))
-
-
-
-(defn init-trs
-
-  "Initializes transition data."
-  
-  []
-  
-  {:trs/active-id :init
-   :trs/time-dir :forward
-   :trs/records {:init {:forward [:init]}
-                 :yams {:forward [:yams]}}})
-
-(rf/reg-event-db
-
- :update-trs
-
- (fn [db [_ trn-name]]
-   
-   (assoc db :trs/active-id trn-name)))
-
 
 
 
@@ -644,19 +550,7 @@
 ;; Initializing
 ;;#######################################################################
 
-(rf/reg-event-db
 
- :jowls
-
- (fn [db _]
-   (update db :jowls #(str % "s"))))
-
-(rf/reg-sub
-
- :jowls-return
-
- (fn [db _]
-   (get db :jowls)))
 
 (def init-display
 
@@ -765,10 +659,6 @@
    [:button {:on-click #(animate! :expand)} "Expand"]
 
    [:br]
-   
-   [:button {:on-click #(>evt [:update-trs :yams])} "Init"]
-
-   [:br]
 
    [:h2 "Animation Speed"]
    [:input {:type :range
@@ -781,11 +671,13 @@
    
    [:br]
    
-   [:button {:on-click pause!} "||"]
+   [:button {:on-click #(>evt [:toggle-pause])} (<sub [:paused?])]
    
    [:br]
    
-   [:button {:on-click #(>evt [:undo])} "Undo"]])
+   [:button {:on-click #(animate! :rewind)} "Undo"]])
+
+
 
 
 (rf/reg-event-db

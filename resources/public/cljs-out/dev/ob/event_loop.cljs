@@ -196,10 +196,33 @@
 (def paused?
   (atom false))
 
-(defn pause!
-  []
-  (swap! paused? not))
+(rf/reg-fx
 
+ :update-pause-state!
+
+ (fn [p?]
+   (reset! paused? p?)))
+
+(rf/reg-event-fx
+
+ :toggle-pause
+ 
+ (fn [{db :db} _]
+   
+   (let [p? (not (:paused? db))]
+     
+     {:db (assoc db :paused? p?)
+      :update-pause-state! p?})))
+
+(rf/reg-sub
+
+ :paused?
+
+ (fn [db _]
+   
+   (if (get db :paused?)
+     "Resume"
+     "Pause")))
 
 
 

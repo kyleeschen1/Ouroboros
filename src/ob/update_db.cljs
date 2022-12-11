@@ -2,6 +2,7 @@
 (ns ^:figwheel-hooks ob.update-db
   
   (:require
+   [ob.transitions :as t]
    [ob.db-nav :refer [CURR-DB PREV-DB NEXT-DB]]
    [com.rpl.specter :as s])
    
@@ -18,24 +19,43 @@
 
 
 (declare update-db
-         log-history
-         process-trs)
+         change-db-version
+
+         display-update?
+         
+         run-display-update
+         run-version-update
+           
+         apply-trs)
 
 (defn run-db-update
 
   "Performs specified update operation,
-   then performs standard logging.
-
-   - Stores history if specified
-   - Updates transition information"
+   and handles transitions between updates."
   
   [db cf]
   
-  (let [cf (if (:trs? cf)
-             (process-trs cf (:trs-speed db))
-             cf)
-        
-        new-version (update-db cf (s/select-one [CURR-DB] db))
+  (let [db (if (display-update? cf)
+             (run-display-update cf db)
+             (run-version-update cf db))]
+
+    (apply-trs db)))
+
+
+;;#######################################################################
+;; Display Updates
+;;#######################################################################
+
+
+(defn display-update?
+  [{op :op}]
+  (#{:append :remove :replace :update} op))
+
+(defn run-display-update
+  
+  [frame db]
+
+  (let [new-version (update-db frame (s/select-one [CURR-DB] db))
 
         prev-db-id (:id/curr-db db)
         curr-db-id (keyword (gensym "version-"))
@@ -43,16 +63,15 @@
         new-version (merge new-version {:id/prev-db prev-db-id
                                         :id/curr-db curr-db-id})
 
-   
-
-        db* (-> (assoc db :id/curr-db curr-db-id)
+        ;; Update db version ids
+        db* (-> (assoc db :id/curr-db curr-db-id :id/last-db prev-db-id)
                 (assoc-in [:db-versions prev-db-id :id/next-db] curr-db-id)
-                (assoc-in [:db-versions curr-db-id] new-version))]
+                (assoc-in [:db-versions curr-db-id] new-version))
 
-    (println (:id/curr-db db))
-    {:db db*
-     :time (:time cf)}))
+        ;; Store any transition information between these states
+        db* (t/set-trs-info db* frame prev-db-id curr-db-id)]
 
+    db*))
 
 ;;----------------------------------------------
 ;; The Great Multimethod  Declaration Itself...
@@ -92,87 +111,52 @@
   
   (update db :display merge data))
 
-(def history
-  (atom nil))
 
-(defmethod update-db :revert
-  
-  [_ _]  
-
-  (let [prev (peek @history)]
-    (swap! history pop)
-    prev))
 
 ;;#######################################################################
-;; Logging History
+;; Version Updates
 ;;#######################################################################
 
+(defmulti change-db-version
+  (fn [{:keys [op]} _]
+    op))
 
-(defn log-history
-
-  "Logs history if specified.
-
-   Params:
-
-   - cf : update config
-   - db : former database
-   - db* : new database"
+(defmethod change-db-version :prev
+  [_ db]
   
-  [cf db db*]
-  
-  (when-not (= false (:save? cf)) 
+  (if-let [prev-id (s/select-one [CURR-DB :id/prev-db] db)]
     
-    (swap! history conj db))
+    (s/setval :id/curr-db prev-id db)
+    
+    db))
 
-  (println (count @history))
-  db*)
-
+(defn run-version-update
+  
+  [frame db]
+  
+  (let [db* (change-db-version frame db)]
+    
+    (assoc db* :id/last-db (:id/curr-db db))))
 
 
 ;;#######################################################################
-;; Transitions
+;; Applying Transitions
 ;;#######################################################################
 
-(defn process-trs
-  
-  [{:keys [trs data] :as cf} trs-anchor]
-  
-  (let [trs-log (atom {})
+(defn apply-trs
 
-        log! (fn [id dur delay]
-               
-               (let [trs-attrs {:dur dur
-                                :delay delay
-                                :total (+ dur delay)}]
-                 
-                 (swap! trs-log merge {id trs-attrs})))
+  [db]
 
-        format-trs (fn [styles dur delay]
-                        (-> styles
-                            (dissoc :trs)
-                            (assoc :transition-duration (when dur (str dur "ms")))
-                            (assoc :transition-delay (when delay (str delay "ms")))))
-
-        process-trs (fn [id {:keys [trs] :as styles}]
-                      
-                      (let [{:keys [dur delay]} trs
-                            [dur delay] (mapv #(* trs-anchor %) [dur delay])]
-                        
-                        (log! id dur delay)
-                        
-                        (format-trs styles dur delay)))
+  (let [{:keys [id/curr-db id/last-db trs-speed]} db
         
-        
-        data (s/transform [s/MAP-VALS (s/collect :id) :style (s/pred :trs)]
-                          process-trs
-                          data)
+        trs (t/get-trs-info db last-db curr-db)
 
-        max-time (apply max (s/select [s/MAP-VALS :total] @trs-log))]
+        db (s/transform [CURR-DB :display]
+                        (partial t/apply-trs-to-display-data trs trs-speed)
+                        db)]
 
-    (assoc cf
-           :time max-time
-           :data data)))
-
+    {:db db
+     :time (* trs-speed (:time trs))}))
 
 
 
