@@ -3,7 +3,7 @@
 
    [ob.db-nav :as db]
    [ob.scroll :refer [set-scroll-trigger]]
-   
+   [ob.clojure]
    [ob.analyzer :refer [analyze]]
    
    [ob.data-to-hiccup :refer [render]]
@@ -140,7 +140,6 @@
     {id {:op :syntax
          :id id
          :depth depth
-         :style {} ;; {:font-size (str (* 2  depth) "px")}
          :class #{"bracket" tag (str parent-id "-bracket" )}
          :name text}}))
 
@@ -419,15 +418,6 @@
  (fn [display [_ id]]
    
    (get display id)))
-
-
-(rf/reg-event-db
-
- :undo
-
- (fn [db _]
-
-   (:history db)))
 
 
 
