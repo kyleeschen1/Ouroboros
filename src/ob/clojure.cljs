@@ -42,7 +42,8 @@
       (symbol? form) :symbol
       (list? form) :s-exprs)))
 
-
+(defmulti eval-sexpr
+  (comp keyword first))
 
 (defn evaluate
   
@@ -71,15 +72,13 @@
   
   [form env k]
 
-  (letfn [(init [state]
+  (letfn [(state->stream [state]
             (cons state
                   (lazy-seq (let [{:keys [return env k]} state]
                               (when (contains? state :return)
-                                (init (k return env)))))))]
+                                (state->stream (k return env)))))))]
 
-    (init (eval* form env k) )))
-
-(defmulti eval-sexpr (comp keyword first))
+    (state->stream (eval* form env k) )))
 
 (defmethod eval* :default
   [form env k]
@@ -102,7 +101,7 @@
   (eval-sexpr form env k))
 
 ;;#######################################################
-;; Function Invocation
+;; Continuation Helpers
 ;;#######################################################
 
 (defn thread-ks
@@ -118,15 +117,43 @@
       (apply f args))))
 
 (def run-args
-  (thread-ks 
+  
+  (thread-ks
+   
    (fn [form]
+     
      (fn [k]
+       
        (fn [env coll]
-         (eval* form
-                env
-                (fn [result env]
-                  (k env (conj coll result)))))))))
+         
+         (eval* form env (fn [result env]
+                           
+                           (k env (conj coll result)))))))))
 
+(def run-bindings
+  
+  (thread-ks
+   
+   (fn [[sym val]]
+     
+     (fn [k]
+       
+       (fn [env]
+         
+         (eval* val env (fn [result env]
+                          
+                          (let [env (assoc env sym result)]
+                            
+                            {:op :bind-local
+                             :sym sym
+                             :return result
+                             :env env
+                             :k (fn [_ env]
+                                  (k env))}))))))))
+
+;;#######################################################
+;; Function Invocation
+;;#######################################################
 
 (defn lambda?
   [op]
@@ -199,21 +226,77 @@
 
 
 (defmethod eval-sexpr :fn
+  
   [form env k]
+  
   (k form env))
 
 
 (defmethod eval-sexpr :if
+  
   [[_ pred then else :as form] env k]
-  (eval* pred env (fn [return env]
-                    {:op :if
-                     :form form
-                     :return (if return
-                               then
-                               else)
-                     :env env
-                     :k (fn [return env]
-                          (eval* return env k))})))
+  
+  (eval* pred
+         env
+         (fn [return env]
+           {:op :if
+            :form form
+            :return (if return
+                      then
+                      else)
+            :env env
+            :k (fn [return env]
+                 (eval* return env k))})))
+
+(defmethod eval-sexpr :do
+  
+  [[_ & args :as form] env k]
+  
+  (let [k (fn [env coll]
+            {:op :do
+             :form form
+             :env env
+             :return (last coll)
+             :k (fn [return env]
+                  (k return env))})]
+    
+    (run-args k args env [])))
+
+(defmethod eval-sexpr :quote
+  
+  [form env k]
+
+  {:op :quote
+   :form form
+   :env env
+   :return form
+   :k (fn [return env]
+        (k return env))})
+
+(defmethod eval-sexpr :def
+  
+  [[_ sym val :as form] env k]
+  
+  (eval* val env (fn [return env]
+                   {:op :def
+                    :form form
+                    :env (assoc env sym val)
+                    :return val
+                    :k (fn [return env]
+                         (k return env))})))
+
+(defmethod eval-sexpr :set!
+  
+  [[_ sym val :as form] env k]
+  
+  (eval* val env (fn [return env]
+                   {:op :set!
+                    :form form
+                    :env (assoc env sym val)
+                    :return val
+                    :k (fn [return env]
+                         (k return env))})))
+
 
 
 ;;===================================================
@@ -245,6 +328,36 @@
     
     (run-args k args env [])))
 
+(def letfn-fn ^:letfn 'fn)
+
+(defn letfn-fn->binding-pairs
+  
+  [[fname & args :as form]]
+  
+  (let [fn-body (cons letfn-fn args)
+        fn-body (with-meta fn-body (meta form))]
+    
+    [fname fn-body]))
+
+
+(defmethod eval-sexpr :letfn
+  
+  [[_ bindings body :as form] env k]
+  
+  (let [env* env
+        pairs (s/transform [s/ALL-WITH-META]
+                           letfn-fn->binding-pairs
+                           bindings)
+
+        k (fn [env]
+            (eval* body env (fn [return env]
+                              {:op :letfn
+                               :env env*
+                               :form form
+                               :return return
+                               :k (fn [return env]
+                                    (k return env))})))]
+    (run-bindings k pairs env)))
 
 ;;----------------------------------------
 ;; Binding Helpers
@@ -253,44 +366,25 @@
 
 (defn eval-let-forms
   [[op bindings body :as form] env k]
-    
-    (let [pairs (partition 2 bindings)
-          
-          env (if (= op 'loop)
-                (set-recur-point env (s/select [s/ALL s/FIRST] pairs) body)
-                env)
+  
+  (let [pairs (partition 2 bindings)
+        
+        env (if (= op 'loop)
+              (set-recur-point env (s/select [s/ALL s/FIRST] pairs) body)
+              env)
 
-          env* env
-          
-          k (fn [env]
-              (eval* body env  (fn [return env]
-                                 {:op op
-                                  :form form
-                                  :env env*
-                                  :return return
-                                  :k (fn [return env]
-                                       (k return env))})))]
+        env* env
+        
+        k (fn [env]
+            (eval* body env  (fn [return env]
+                               {:op op
+                                :form form
+                                :env env*
+                                :return return
+                                :k (fn [return env]
+                                     (k return env))})))]
 
-      (run-bindings k pairs env)))
-
-
-(def run-bindings
-  (thread-ks
-   (fn [[sym val]]
-     (fn [k]
-       (fn [env]
-         (eval* val
-                env
-                (fn [result env]
-                  (let [env (assoc env sym result)]
-                    {:op :bind
-                     :sym sym
-                     :return result
-                     :env env
-                     :k (fn [_ env]
-                          (k env))}))))))))
-
-
+    (run-bindings k pairs env)))
 
 ;;===================================================
 ;; Control Flow
