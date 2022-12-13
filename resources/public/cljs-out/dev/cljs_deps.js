@@ -209,7 +209,7 @@ goog.addDependency("../ob/event_loop.js", ['ob.event_loop'], ['com.rpl.specter',
 goog.addDependency("../cljsjs/react-dom/development/react-dom.inc.js", ['react_dom', 'cljsjs.react.dom'], ['react'], {'foreign-lib': true});
 goog.addDependency("../cljs/spec/alpha.js", ['cljs.spec.alpha'], ['cljs.core', 'goog.object', 'clojure.string', 'clojure.walk', 'cljs.spec.gen.alpha']);
 goog.addDependency("../cljs/repl.js", ['cljs.repl'], ['goog.string', 'cljs.core', 'goog.string.format', 'cljs.spec.alpha']);
-goog.addDependency("../ob/clojure.js", ['ob.clojure'], ['com.rpl.specter', 'cljs.pprint', 'cljs.repl', 'clojure.zip', 'cljs.core']);
+goog.addDependency("../ob/clojure.js", ['ob.clojure'], ['com.rpl.specter', 'cljs.pprint', 'cljs.repl', 'cljs.core']);
 goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
 goog.addDependency("../ob/defs.js", ['ob.defs'], ['cljs.core']);
 goog.addDependency("../reagent/dom.js", ['reagent.dom'], ['reagent.impl.util', 'reagent.impl.protocols', 'reagent.ratom', 'cljs.core', 'reagent.impl.template', 'reagent.impl.batching', 'reagent.impl.input', 'react_dom']);

@@ -4,8 +4,7 @@
 
    [com.rpl.specter :as s]
    [cljs.pprint :refer [pprint]]
-   [cljs.repl :refer [source]]
-   [clojure.zip :as z])
+   [cljs.repl :refer [source]])
   
   (:require-macros
    [com.rpl.specter :refer [defnav comp-paths]]))
@@ -22,17 +21,12 @@
       (Write stepper)
       (Write re-indexer))
 
- (Create skip functionality
-         (Write do and def)
-         ())
+ (Create skip functionality)
 
  (Other
-  
-  Quoting
-  Collection Types (+ accessors)
+ 
   Add lexical scope
-  Add env accessors
-  Change all -eval to eval*
+  Add env navs
   Macros (defn and or cond case -> ->> lazy-seq when when-let if-let)))
 
 
@@ -40,7 +34,9 @@
   (fn [form env k]
     (cond
       (symbol? form) :symbol
-      (list? form) :s-exprs)))
+      (seq? form) :s-exprs
+      (list? form) :s-exprs
+      (coll? form) :collection)))
 
 (defmulti eval-sexpr
   (comp keyword first))
@@ -48,24 +44,27 @@
 (defn evaluate
   
   [form env k]
-  
-  (let [counter (atom 0)]
 
-    (loop [state (eval* form env k)
-           states []]
+  (try
+    (let [counter (atom 0)]
 
-      (swap! counter inc)
-      
-      (when (< @counter 100)
+      (loop [state (eval* form env k)
+             states []]
+
+        (swap! counter inc)
         
-        (let [{:keys [return env k]} state]
-
-          (when (map? state)
-            (pprint (dissoc state :env :k)))
+        (when (< @counter 100)
           
-          (when (contains? state :return)
+          (let [{:keys [return env k]} state]
 
-            (recur (k return env) (conj states state))))))))
+            (when (map? state)
+              (pprint (dissoc state :env :k)))
+            
+            (when (contains? state :return)
+
+              (recur (k return env) (conj states state)))))))
+    (catch js/Error. e
+      e)))
 
 
 (defn gen-evaluation-stream
@@ -80,25 +79,7 @@
 
     (state->stream (eval* form env k) )))
 
-(defmethod eval* :default
-  [form env k]
-  {:op :constant
-   :form form
-   :return form
-   :env env
-   :k k})
 
-(defmethod eval* :symbol
-  [form env k]
-  {:op :symbol
-   :form form
-   :env env
-   :k k
-   :return (get env form)})
-
-(defmethod eval* :s-exprs
-  [form env k]
-  (eval-sexpr form env k))
 
 ;;#######################################################
 ;; Continuation Helpers
@@ -152,6 +133,44 @@
                                   (k env))}))))))))
 
 ;;#######################################################
+;; Eval* Definitions
+;;#######################################################
+
+(defmethod eval* :default
+  [form env k]
+  {:op :constant
+   :form form
+   :return form
+   :env env
+   :k k})
+
+(defmethod eval* :symbol
+  [form env k]
+  {:op :symbol
+   :form form
+   :env env
+   :k k
+   :return (get env form)})
+
+(defmethod eval* :collection
+  [form env k]
+  (let [k (fn [env coll]
+            {:op :collection
+             :form form
+             :env env
+             :k (fn [return env]
+                  (k return env))
+             :return (if (map-entry? form)
+                       coll
+                       (into (empty form) coll))})]
+
+    (run-args k form env [])))
+
+(defmethod eval* :s-exprs
+  [form env k]
+  (eval-sexpr form env k))
+
+;;#######################################################
 ;; Function Invocation
 ;;#######################################################
 
@@ -187,7 +206,8 @@
 (defn eval-invoke
   [f args env k]
   {:op :invoke
-   :env env 
+   :env env
+   :f f
    :return (apply f args)
    :k k} )
 
@@ -272,32 +292,6 @@
    :return form
    :k (fn [return env]
         (k return env))})
-
-(defmethod eval-sexpr :def
-  
-  [[_ sym val :as form] env k]
-  
-  (eval* val env (fn [return env]
-                   {:op :def
-                    :form form
-                    :env (assoc env sym val)
-                    :return val
-                    :k (fn [return env]
-                         (k return env))})))
-
-(defmethod eval-sexpr :set!
-  
-  [[_ sym val :as form] env k]
-  
-  (eval* val env (fn [return env]
-                   {:op :set!
-                    :form form
-                    :env (assoc env sym val)
-                    :return val
-                    :k (fn [return env]
-                         (k return env))})))
-
-
 
 ;;===================================================
 ;; Bindings
@@ -386,6 +380,36 @@
 
     (run-bindings k pairs env)))
 
+
+
+;;===================================================
+;; State
+;;===================================================
+
+(defmethod eval-sexpr :def
+  
+  [[_ sym val :as form] env k]
+  
+  (eval* val env (fn [return env]
+                   {:op :def
+                    :form form
+                    :env (assoc env sym val)
+                    :return val
+                    :k (fn [return env]
+                         (k return env))})))
+
+(defmethod eval-sexpr :set!
+  
+  [[_ sym val :as form] env k]
+  
+  (eval* val env (fn [return env]
+                   {:op :set!
+                    :form form
+                    :env (assoc env sym val)
+                    :return val
+                    :k (fn [return env]
+                         (k return env))})))
+
 ;;===================================================
 ;; Control Flow
 ;;===================================================
@@ -424,9 +448,168 @@
 ;; Macros
 ;;#######################################################
 
+(declare op->macro-fn
+         redistribute-ids)
+
+(defn macroexpand*
+  [[op & args :as form] env]
+  (if-let [macro-fn (op->macro-fn op)]
+    (let [new (redistribute-ids (apply macro-fn args))]
+      (if (coll? new)
+        (recur new env)
+        new))
+    form))
+
+(defn alter-macroexpand-node?
+  [node]
+  (and (coll? node)
+       (not (:id (meta node)))))
+
+(def RESTORE-MACRO
+  (s/recursive-path [] p
+                    (s/cond-path symbol?
+                                 s/STAY
+                                 
+                     alter-macroexpand-node?
+                     [(s/stay-then-continue s/ALL-WITH-META p)]
+
+                     s/STAY)))
+
+
+(def MACROEXPAND
+  (s/recursive-path [] p
+                    (s/if-path #(or (seq? %)
+                                    (list? %))
+                               [(s/stay-then-continue (s/if-path #(or (seq? %)
+                                                                      (list? %))
+                                                                 [s/ALL-WITH-META p]
+                                                                 s/STAY))]
+                               s/STAY)))
+
+
+(defn redistribute-ids
+  [node]
+  (s/transform RESTORE-MACRO
+               (fn [node]
+                 (if (symbol? node)
+                   (with-meta (symbol (name node)) (meta node))
+                   node))
+               node))
+
+(defn macroexpand-all*
+  [form]
+  (s/transform MACROEXPAND
+               (fn [form]
+                 (if (coll? form)
+                   (macroexpand* form {})
+                   form))
+               form))
+
+
+;; From clojure.core, nearly verbatim, but changed to functions.
+
+(defn and*
+  "Evaluates exprs one at a time, from left to right. If a form
+  returns logical false (nil or false), and returns that value and
+  doesn't evaluate any of the other expressions, otherwise it returns
+  the value of the last expr. (and) returns true."
+  ([] true)
+  ([x] x)
+  ([x & next]
+   `(let [and# ~x]
+      (if and# (and ~@next) and#))))
+
+(defn or*
+  "Evaluates exprs one at a time, from left to right. If a form
+  returns a logical true value, or returns that value and doesn't
+  evaluate any of the other expressions, otherwise it returns the
+  value of the last expression. (or) returns nil."
+  ([] nil)
+  ([x] x)
+  ([x & next]
+   `(let [or# ~x]
+      (if or# or# (or ~@next)))))
+
+(defn ->*
+  "Threads the expr through the forms. Inserts x as the
+  second item in the first form, making a list of it if it is not a
+  list already. If there are more forms, inserts the first form as the
+  second item in second form, etc."
+  {:added "1.0"}
+  [x & forms]
+  (loop [x x, forms forms]
+    (if forms
+      (let [form (first forms)
+            threaded (if (seq? form)
+                       (with-meta `(~(first form) ~x ~@(next form)) (meta form))
+                       (list form x))]
+        (recur threaded (next forms)))
+      x)))
+
+
+(defn ->>*
+  "Threads the expr through the forms. Inserts x as the
+  last item in the first form, making a list of it if it is not a
+  list already. If there are more forms, inserts the first form as the
+  last item in second form, etc."
+  {:added "1.1"}
+  [x & forms]
+  (loop [x x, forms forms]
+    (if forms
+      (let [form (first forms)
+            threaded (if (seq? form)
+              (with-meta `(~(first form) ~@(next form)  ~x) (meta form))
+              (list form x))]
+        (recur threaded (next forms)))
+      x)))
+
+(defn lazy-seq*
+  "Takes a body of expressions that returns an ISeq or nil, and yields
+  a ISeqable object that will invoke the body only the first time seq
+  is called, and will cache the result and return it on all subsequent
+  seq calls."
+  [& body]
+  `(new cljs.core/LazySeq nil (fn [] ~@body) nil nil))
+
+(defn cond*
+  "Takes a set of test/expr pairs. It evaluates each test one at a
+  time.  If a test returns logical true, cond evaluates and returns
+  the value of the corresponding expr and doesn't evaluate any of the
+  other tests or exprs. (cond) returns nil."
+  {:added "1.0"}
+  [& clauses]
+    (when clauses
+      (list 'if (first clauses)
+            (if (next clauses)
+                (second clauses)
+                (throw "cond requires an even number of forms"))
+            (cons 'cond (next (next clauses))))))
+
+(defn when*
+  "Evaluates test. If logical true, evaluates body in an implicit do."
+  {:added "1.0"}
+  [test & body]
+  (list 'if test (cons 'do body)))
+
+
+(defn when-not*
+  "Evaluates test. If logical false, evaluates body in an implicit do."
+  {:added "1.0"}
+  [test & body]
+  (list 'if test nil (cons 'do body)))
 
 
 
+
+(def op->macro-fn
+  {'cond #'cond*
+   'and #'and*
+   'or #'or*
+   '-> #'->*
+   '->> #'->>*
+   'when #'when*
+   'when-not #'when-not*
+   'lazy-seq #'lazy-seq*})
 
 
 ;;#######################################################
