@@ -12,7 +12,7 @@
    
    [ob.utils :refer [walk-ids <sub >evt]]
 
-   [ob.event-loop :refer [animate animate!]]
+   [ob.event-loop :refer [animate! gen-frames]]
 
    [com.rpl.specter :as s]
 
@@ -442,63 +442,182 @@
 
 
 
+
 ;;#######################################################################
 ;; Animations
 ;;########################################################################
+
+(comment
+
+  (defmethod animate :contract*
+    
+    [_ _ {:keys [size delay-fn data]}]
+
+    (let [max-depth (apply max (s/select [s/MAP-VALS :depth] data))
+          
+          interval (/ 10 max-depth)
+          
+          data (update-styles data (fn [_]
+                                     {:font-size size
+                                      :padding-top size
+                                      :padding-bottom size
+                                      :padding-right size
+                                      :padding-left size}))
+
+          trs (get-trs-data data
+                            (fn [{:keys [depth]}]
+                              {:dur 4
+                               :delay (delay-fn max-depth depth interval)}))]
+
+      
+      {:op :update
+       :trs trs
+       :data data}))
+
+  (defmethod animate :contract
+    [_ data _]
+
+    (pprint "Contract New")
+    (animate :contract*
+             
+             nil
+             
+             {:op/frame :contract*
+              :data data
+              :size "0px"
+              :delay-fn (fn [max-depth depth interval]
+                          (/ (- max-depth depth) interval))}))
+
+  (defmethod animate :expand
+    [_ data _]
+    
+    (animate :contract*
+             
+             nil
+             
+             {:op/frame :contract*
+              :data data
+              :size nil
+              :delay-fn (fn [_ depth interval]
+                          (* depth interval))})))
+
+;;#######################################################################
+;; Frame Generation
+;;#######################################################################
 
 (defn idx-clj->data
   [form]
   (apply merge (ast->data (analyze form {}))))
 
-(defmethod animate :rewind
-  [_ _ _]
-  {:op :prev})
 
 (defn get-trs-data
 
-  [data f]
+  ([data f]
+   (get-trs-data data f nil))
 
-  (let [f* (fn [datum] 
-             (let [trs (f datum)]
-                (assoc trs :total (+ (:dur trs)(:delay trs)))))
-        
-        trs-data (s/transform [s/MAP-VALS] f* data)
+  ([data f params]
 
-        max-time (apply max (s/select [s/MAP-VALS :total] trs-data))]
+   (let [f* (fn [datum] 
+              (let [trs (f datum params)
+                    total (+ (:dur trs)(:delay trs))]
+                (assoc trs :total total)))
+         
+         trs-data (s/transform [s/MAP-VALS] f* data)
 
-    {:data trs-data
-     :time max-time}))
+         max-time (apply max (s/select [s/MAP-VALS :total] trs-data))]
+
+     {:data trs-data
+      :time max-time})))
+
+
+
+(defn trs-by-depth
+  [f]
+  (fn [data]
+    (let [max-depth (apply max (s/select [s/MAP-VALS :depth] data))
+          interval (/ 10 max-depth)]
+      (get-trs-data data
+                          (fn [{:keys [depth]}]
+                            {:dur 4
+                             :delay (f max-depth depth interval)})))))
+
+
+(def contract
+  (trs-by-depth
+   (fn [max-depth depth interval]
+     (/ (- max-depth depth) interval))))
+
+(def expand
+  (trs-by-depth
+   (fn [_ depth interval]
+     (* depth interval))))
+
+;;#######################################################################
+;; Update Styles
+;;#######################################################################
+
+(declare gen-styles)
 
 (defn update-styles
-
-  [data f]
-
-  (let [f* (fn [datum]
-             (update datum :style merge (f datum)))]
-
-    (s/transform [s/MAP-VALS] f* data)))
-
-(defmethod animate :add-code
   
-  [_ _ [code]]
+  ([tag data]
+   (update-styles tag data nil))
   
-  (let [ast (walk-ids code)
-        
-        data (apply merge (ast->data (analyze ast {})))
-        
-        id  (:id (meta ast))]
+  ([tag data params]
+
+   (let [;; Embellish to merge return back into style map
+         f* (fn [datum]
+              (update datum :style merge (gen-styles tag datum params)))]
+
+     (s/transform [DATA] f* data))))
+
+(defmulti gen-styles
+  (fn [tag _ _]
+    tag))
+
+(defmethod gen-styles :contract
+  [_ _ _]
+  {:font-size "0px"
+   :padding-top "0px"
+   :padding-bottom "0px"
+   :padding-right "0px"
+   :padding-left "0px"})
+
+(defmethod gen-styles :expand
+  [_ _ _]
+  {:font-size nil
+   :padding-top nil
+   :padding-bottom nil
+   :padding-right nil
+   :padding-left nil})
+
+(defmethod gen-styles :fade
+  
+  [_ {:keys [children]} {opacity :opacity :or {opacity 0.2}}]
+  
+  (when-not children
     
-    {:op :append
-     :id/parent id
-     :time 1
-     :data data}))
+    {:opacity opacity}))
 
 
-(defmethod animate :append-indexed-code
+;;#######################################################################
+;; Gen Frames Implementation
+;;#######################################################################
+
+(defmethod gen-frames :rewind
+  [_]
+  {:op :prev})
+
+
+(defmethod gen-frames :clj/append
   
-  [_ _ [code]]
-  
-  (let [data (idx-clj->data code)
+  [{code :code idx? :indexed? :or {idx? false}}]
+
+  (let [code (if idx?
+               code
+               (walk-ids code))
+
+        data (idx-clj->data code)
         
         id  (:id (meta code))]
     
@@ -507,55 +626,178 @@
      :time 1
      :data data}))
 
-
-
-(defmethod animate :contract*
+(defn update-depth
   
-  [_ data {:keys [size delay-fn]}]
-
-  (let [max-depth (apply max (s/select [s/MAP-VALS :depth] data))
+  [data id-return]
+  
+  (let [return-depth (let [depth (:depth (id-return data))]
+                       (if (zero? depth)
+                         1
+                         depth))
         
-        interval (/ 10 max-depth)
-        
-        data (update-styles data (fn [_]
-                                   {:font-size size
-                                    :padding-top size
-                                    :padding-bottom size
-                                    :padding-right size
-                                    :padding-left size}))
+        former-depth 0;;
 
-        trs (get-trs-data data
-                          (fn [{:keys [depth]}]
-                            {:dur 4
-                             :delay (delay-fn max-depth depth interval)}))]
+        depth-delta (- former-depth return-depth)
 
+        data (s/transform [s/MAP-VALS :depth]
+                          (fn [depth]
+                            (+ depth depth-delta))
+                          data)]
     
-    {:op :update
-     :trs trs
-     :data data}))
+    data))
 
 
-(defmethod animate :contract
-  [_ data _]
+
+
+(defmethod gen-frames :symbol-resolve
   
-  (animate :contract*
-           
-           data
-           
-           {:size "0px"
-            :delay-fn (fn [max-depth depth interval]
-                        (/ (- max-depth depth) interval))}))
+  [{:keys [form id-form return id-return id-return* dom]}]
 
-(defmethod animate :expand
-  [_ data _]
+  (pprint "Gen Symbol Resolve")
+
+  (let [;; Processing New Data
+        data (idx-clj->data return)
+        
+        data (update-depth data id-return*)
+
+
+        data (update-styles :contract data)
+
+        ;; Expanding the new form
+        data* (update-styles :expand data)
+    
+        trs (expand data*)
+        #_(:trs (animate :expand data* nil))
+
+        ;; Contracting the old form
+        form-data (s/select-one [(desc id-form)] dom)
+        form-data (update-styles :contract form-data)]
+
+    [{:op :update
+      :data form-data
+      :trs {:data {id-form {:dur 4 :delay 0} } :time 4}}
+     
+     {:op :replace
+      :data data
+      :id/pre id-form
+      :id/post id-return*}
+     
+     {:op :update
+      :data data*
+      :trs trs}]))
+
+
+
+(defmethod gen-frames :jump-replace
   
-  (animate :contract*
-           
-           data
-           
-           {:size nil
-            :delay-fn (fn [_ depth interval]
-                        (* depth interval))}))
+  [{:keys [form id-form return id-return dom]}]
+  
+  (let [form-data (s/select-one (desc-but-node id-form id-return) dom)
+
+        opaque (update-styles :fade form-data)
+
+        op-trs (get-trs-data opaque (fn []
+                                       {:dur 4
+                                        :delay 0}))
+
+        form-data* (update-styles :contract opaque)
+        
+        trs (get-trs-data form-data* (fn []
+                                       {:dur 10
+                                        :delay 0}))
+
+
+        return-data (s/select-one (desc id-return) dom)
+
+       
+        trs-return (get-trs-data return-data (fn []
+                                       {:dur 0
+                                        :delay 0}))]
+
+    [{:op :update
+      :data opaque
+      :trs op-trs}
+
+     {:op :update
+      :data form-data*
+      :trs trs}
+     
+     {:op :replace
+      :data return-data
+      :id/pre id-form
+      :id/post id-return
+      :trs trs-return }]))
+
+(defmethod gen-frames :replace-w-new-code
+  
+  [{:keys [form id-form return id-return id-return* dom]}]
+  
+  (let [data (idx-clj->data return)
+        data (update-depth data id-return*)]
+
+    {:op :replace
+     :data data
+     :id/pre id-form
+     :id/post id-return*}))
+
+ ;;#######################################################################
+ ;; Running the Animations
+ ;;#######################################################################
+
+
+(rf/reg-event-db
+
+ :init-animation-stream
+
+ (fn [db [_ stream]]
+
+   (s/setval [:animation] stream db)))
+
+(defn init-code-eval
+  [form]
+  (let [stream (c/form->animation-stream form)]
+    (>evt [:init-animation-stream stream])
+    (animate! {:op/frame :clj/append :indexed? true :code form})))
+
+
+(def completed?
+  #{:symbol-resolve :jump-replace :replace-w-new-code})
+
+
+(rf/reg-fx
+
+ :call-animation
+
+ (fn [a]
+   
+   (println "########################")
+   (println (:op/frame a))
+   
+   (when (completed? (:op/frame a))
+     
+     (animate! a))))
+
+(rf/reg-event-fx
+
+ :trigger-next-event!
+
+ (fn [{:keys [db]} _]
+
+   (if-let [a false;;(s/select-one [:animation-history (db :id/curr-db)] db)
+            ]
+
+      {:db db
+       :call-animation a}
+     
+     (let #_[[a & as] (s/select-one [db/CURR-DB :animation] db)
+           db (s/setval [db/CURR-DB :animation] as db)
+             db (s/setval [:animation-history (db :id/curr-db)] a db)]
+
+          [[a & as] (:animation db)]
+       
+       {:db (assoc db :animation as)
+        :call-animation a}))))
+
 
 
 (def form
@@ -588,238 +830,19 @@
   (walk-ids Y))
 
 
-(rf/reg-event-db
-
- :init-animation-stream
-
- (fn [db [_ stream]]
-
-   (s/setval [:animation] stream db)))
-
-
-
-(defn update-depth
-  
-  [db data id-form id-return]
-  
-  (let [return-depth (let [depth (:depth (id-return data))]
-                       (if (zero? depth)
-                         1
-                         depth))
-        
-        former-depth 0;;
-
-        depth-delta (- former-depth return-depth)
-
-        data (s/transform [s/MAP-VALS :depth]
-                          (fn [depth]
-                            (+ depth depth-delta))
-                          data)]
-    
-    data))
-
-
-(defmulti format-style*
-  (fn [tag _]
-    tag))
-
-(defmethod format-style* :contract
-  [_ _]
-  {:font-size "0px"
-   :padding-top "0px"
-   :padding-bottom "0px"
-   :padding-right "0px"
-   :padding-left "0px"})
-
-(defmethod format-style* :expand
-  [_ _]
-  {:font-size nil
-   :padding-top nil
-   :padding-bottom nil
-   :padding-right nil
-   :padding-left nil})
-
-(defn format-style
-  [tag data]
-  (println tag)
-  (update-styles data (fn [datum]
-                        (format-style* tag datum))))
-
-
-(defmethod animate :symbol-resolve
-  
-  [_ db [{:keys [form id-form return id-return id-return*]}]]
-
-  (let [;; Processing New Data
-        data (idx-clj->data return)
-
-       ;; (:data (animate :append-indexed-code nil [return]))
-        data (update-depth db data id-form id-return*)
-
-
-        data (format-style :contract data)
-
-        ;; Expanding the new form
-        data* (format-style :expand data)
-    
-        trs (:trs (animate :expand data* nil))
-
-        ;; Contracting the old form
-        form-data (s/select-one [(desc id-form)] db)
-        form-data (format-style :contract form-data)]
-
-    [{:op :update
-      :data form-data
-      :trs {:data {id-form {:dur 4 :delay 0} } :time 4}}
-     
-     {:op :replace
-      :data data
-      :id/pre id-form
-      :id/post id-return*}
-     
-     {:op :update
-      :data data*
-      :trs trs}]))
-
-
-
-(defmethod animate :jump-replace
-  
-  [_ db [{:keys [form id-form return id-return]}]]
-  
-  (let [;; return data
-        
-
-        form-data (s/select-one (desc-but-node id-form id-return) db)
-
-        opaque (update-styles form-data
-                                 (fn [{:keys [id children]}]
-                                   (if-not children
-                                     {
-                                      :opacity 0.2
-                                    ;;  :padding-top "0px"
-                                   ;;   :padding-bottom "0px"
-                                    ;;  :padding-left "0px"
-                                    ;;  :padding-right "0px"
-                                      })))
-
-        op-trs (get-trs-data opaque (fn []
-                                       {:dur 4
-                                        :delay 0}))
-
-        form-data* (update-styles opaque
-                                 (fn [{:keys [id children]}]
-                                   #_(when-not children)
-                                   {:font-size "0px"
-                                    
-                                    :padding-top "0px"
-                                    :padding-bottom "0px"
-                                    :padding-left "0px"
-                                    :padding-right "0px"}))
-        
-        trs (get-trs-data form-data* (fn []
-                                       {:dur 10
-                                        :delay 0}))
-
-
-        return-data (s/select-one (desc id-return) db)
-
-        
-
-        trs-return (get-trs-data return-data (fn []
-                                       {:dur 0
-                                        :delay 0}))]
-
-    [{:op :update
-      :data opaque
-      :trs op-trs}
-
-     {:op :update
-      :data form-data*
-      :trs trs}
-     
-     {:op :replace
-      :data return-data
-      :id/pre id-form
-      :id/post id-return
-      :trs trs-return }]))
-
-
-
-(defmethod animate :replace-w-new-code
-  
-  [_ db [{:keys [form id-form return id-return id-return*]}]]
-  
-  (let [data (idx-clj->data return)
-        data (update-depth db data id-form id-return*)]
-
-    {:op :replace
-     :data data
-     :id/pre id-form
-     :id/post id-return*}))
-
-
-(def completed?
-  #{:symbol-resolve :jump-replace :replace-w-new-code})
-
-(rf/reg-fx
-
- :call-animation
-
- (fn [a]
-   
-   (let [{:keys [animation] :as frame} a]
-
-     (println "########################")
-     (println animation)
-     
-     (when (completed? animation)
-       
-       (animate! animation frame)))))
-
-(rf/reg-event-fx
-
- :trigger-next-event!
-
- (fn [{:keys [db]} _]
-
-   (if-let [a false;;(s/select-one [:animation-history (db :id/curr-db)] db)
-            ]
-
-      {:db db
-       :call-animation a}
-     
-     (let #_[[a & as] (s/select-one [db/CURR-DB :animation] db)
-           db (s/setval [db/CURR-DB :animation] as db)
-             db (s/setval [:animation-history (db :id/curr-db)] a db)]
-
-          [[a & as] (:animation db)]
-       
-       {:db (assoc db :animation as)
-        :call-animation a}))))
-
-
-
-(defn init-code-eval
-  []
-  (let [stream (c/form->animation-stream form)]
-    (>evt [:init-animation-stream stream])
-    (animate! :append-indexed-code form)))
-
-
 (defn init-eval-button
   []
   [:div
-   [:button {:on-click init-code-eval}
+   [:button {:on-click #(init-code-eval form)}
     "Init Code Eval!"]
    [:br]
    [:button {:on-click #(>evt [:trigger-next-event!])}
     "Walk Evaluation Forward"]])
 
 
- ;;#######################################################################
- ;; Event Handlers
- ;;#######################################################################
+;;#######################################################################
+;; Event Handlers
+;;#######################################################################
 
 
 (rf/reg-sub
@@ -1078,15 +1101,15 @@
    [:p.expo "Next line"]
 
    #_[:button {:on-click #(>evt [:run-animation :add-code sample-code])} "Add code"]
-   [:button {:on-click #(animate! :add-code sample-code)} "Add code"]
+   [:button {:on-click #(animate! {:op/frame :add-code :code sample-code})} "Add code"]
    
    [:br]
 
-   [:button {:on-click #(animate! :contract)} "Contract"]
+   [:button {:on-click #(animate! {:op/frame :contract})} "Contract"]
 
    [:br]
    
-   [:button {:on-click #(animate! :expand)} "Expand"]
+   [:button {:on-click #(animate! {:op/frame :expand})} "Expand"]
 
    [:br]
 
@@ -1105,7 +1128,7 @@
    
    [:br]
    
-   [:button {:on-click #(animate! :rewind)} "Undo"]
+   [:button {:on-click #(animate! {:op/frame :rewind})} "Undo"]
 
    [:br]
    [init-eval-button]])

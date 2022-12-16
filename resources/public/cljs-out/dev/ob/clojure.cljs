@@ -828,10 +828,9 @@
 
   (if-let [a (frame->animation frame)]
 
-    (assoc frame :animation a)
+    (assoc frame :op/frame a)
 
     frame))
-
 
 
 
@@ -863,7 +862,7 @@
 
     (->> (gen-evaluation-stream form env (fn [frame _] {:form frame}))
          (map f)
-         (filter :animation)
+         (filter :op/frame)
          (take-while identity))))
 
 

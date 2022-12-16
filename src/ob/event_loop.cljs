@@ -20,35 +20,31 @@
 ;; Event Multimethod
 ;;#######################################################################
 
+(defmulti gen-frames :op/frame)
 
-(defmulti animate
-  
-  (fn [tag _ _]
+(defn call-gen-frames
+
+  "Takes in:
+   - instr : a frame generation instruction
+   - db : the global DB
+
+  Then calls gen-frames with an instruction map
+  embellised with the following keys:
+
+  - :dom -> display data
+  - :versions -> versions of the display data"
     
-    tag))
-
-
-(defn events->updates
-
-  "Compiles events into a flat vector
-   of db updates."
+  [instr db]
   
-  [tag display-data params]
-  
-  (let [cf (animate tag display-data (vec params))
-      
+  (let [dom (s/select-one [db/CURR-DB :display] db)
+        vs (s/select-one [:versions] db)
+        instr (assoc instr :dom dom :versions vs)
 
-        configs (if (vector? cf)
-                   cf
-                   [cf])]
+        frames (gen-frames instr)]
 
-    configs))
-
-
-;;#######################################################################
-;; Animation Handlers
-;;#######################################################################
-
+    (if (vector? frames)
+      frames
+      [frames])))
 
 
 
@@ -72,9 +68,9 @@
   "Puts an animation on the
    event channel."
 
-  [& args]
+  [instr]
 
-  (a/put! events (vec args)))
+  (a/put! events instr))
 
 
 ;;------------------------------
@@ -90,9 +86,9 @@
   
   (go-loop []
 
-    (let [event (a/<! events)]
+    (let [instr (a/<! events)]
       
-      (>evt (into [:events->updates] event))
+      (>evt (conj [:events->frames] instr))
 
       (a/<! block-event-loop)
       
@@ -148,18 +144,15 @@
 (rf/reg-fx :init-event-loop!
            run-event-loop!)
 
-
 (rf/reg-event-fx
 
- :events->updates
+ :events->frames
+ 
+ (fn [{:keys [db]} [_ instr]]
+   
+   (let [frames (call-gen-frames instr db)]
 
- (fn [{:keys [db]} [_ tag & params]]
-
-   (let [display (s/select-one [db/CURR-DB :display] db)
-         events (events->updates tag display params)]
-
-     {:queue-db-updates! events})))
-
+     {:queue-db-updates! frames})))
 
 (rf/reg-fx :queue-db-updates!
            
