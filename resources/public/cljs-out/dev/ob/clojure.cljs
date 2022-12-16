@@ -2,9 +2,15 @@
 (ns ^:figwheel-hooks ob.clojure
   (:require
 
+   [ob.utils :refer [constant? Constant]]
+   [ob.analyzer :refer [analyze]]
+
+   
    [com.rpl.specter :as s]
    [cljs.pprint :refer [pprint]]
-   [cljs.repl :refer [source]])
+   [cljs.repl :refer [source]]
+
+   [clojure.zip :as z])
   
   (:require-macros
    [com.rpl.specter :refer [defnav comp-paths]]))
@@ -28,6 +34,14 @@
   Add lexical scope
   Add env navs
   Macros (defn and or cond case -> ->> lazy-seq when when-let if-let)))
+
+
+
+
+
+;;####################################################################
+;; Evaluation
+;;####################################################################
 
 
 (defmulti eval*
@@ -66,16 +80,22 @@
     (catch js/Error. e
       e)))
 
+(declare reindex)
 
 (defn gen-evaluation-stream
   
   [form env k]
 
   (letfn [(state->stream [state]
-            (cons state
-                  (lazy-seq (let [{:keys [return env k]} state]
-                              (when (contains? state :return)
-                                (state->stream (k return env)))))))]
+
+            (when (contains? state :return)
+
+              (let [state (reindex state)]
+                
+                (cons state
+                      (lazy-seq (let [{:keys [return form env k]} state]
+                                  
+                                  (state->stream (k return env))))))))]
 
     (state->stream (eval* form env k) )))
 
@@ -186,8 +206,13 @@
 
 (defn eval-lambda
   [f args env k]
+  
   (let [env* env
         [_ params body] f
+
+        lex-env (:lex-env (meta f))
+
+        env (merge env lex-env)
         env (merge env (zipmap params args))
         env (set-recur-point env params body)]
 
@@ -203,12 +228,24 @@
                              :k (fn [return env]
                                   (k return env))})))}))
 
+
+(defn get-val
+  [form]
+  (if (constant? form)
+    (:value form)
+    form))
+
+(defn lift-apply
+  [op args]
+  (apply op (map get-val args)))
+
+
 (defn eval-invoke
   [f args env k]
   {:op :invoke
    :env env
    :f f
-   :return (apply f args)
+   :return (lift-apply f args)
    :k k} )
 
 (defn cc?
@@ -248,8 +285,8 @@
 (defmethod eval-sexpr :fn
   
   [form env k]
-  
-  (k form env))
+  (let [form (vary-meta form assoc :lex-env env)]
+    (k form env)))
 
 
 (defmethod eval-sexpr :if
@@ -261,7 +298,7 @@
          (fn [return env]
            {:op :if
             :form form
-            :return (if return
+            :return (if (get-val return)
                       then
                       else)
             :env env
@@ -620,19 +657,37 @@
 ;; Lifting Functions Over Constants
 ;;----------------------------------------
 
-
-
-
 ;;#######################################################
 ;; Environment
 ;;#######################################################
 
+(def var->sym
+  (comp symbol name symbol))
+
+(defn gen-globals
+  
+  [& vars]
+  
+  (let [to-pair (fn [v]
+               [(var->sym v) v])]
+    (into {} (map to-pair vars))))
+
+(def globals
+  
+  (gen-globals
+   
+   #'+ #'- #'* #'/
+   
+   #'=
+   
+   #'> #'>= #'< #'<=
+   
+   #'even? #'odd? #'zero?
+   
+   #'apply))
+
 (def env
-  {'- #'-
-   '+ #'+
-   '* #'*
-   '/ #'/
-   '= #'=})
+  globals)
 
 
 
@@ -640,6 +695,238 @@
 ;; Re-Indexing
 ;;#######################################################
 
+(def RE-INDEX
+  (s/recursive-path [] p
+                    (s/if-path coll?
+                      [(s/continue-then-stay s/ALL-WITH-META p)]
+                      s/STAY)))
 
+
+(defn reindex-node
+
+  [id]
+  
+  (fn  [result]
+
+    (if-not (satisfies? IMeta result)
+      
+      (Constant. result {:id (gensym (str id "-const-"))})
+      
+      (s/transform [s/META] (fn [m]
+                                  (let [r-id (if-let [r-id (:id m)]
+                                               (symbol (str id "-" r-id))
+                                               (gensym ""))
+
+                                        c-ids (when-let [c (:child-ids m)]
+                                                (mapv  #(symbol (str id "-" %)) c))]
+
+                                    (assoc m :id r-id :child-ids c-ids)))
+                   result))))
+
+(defn reindex?
+  [{:keys [op]}]
+  (contains? #{:invoke :symbol} op))
+
+(defn -reindex
+  
+  [form-id {:keys [form result] :as state}]
+
+  (if-not (reindex? state)
+
+    state
+
+    (s/transform [:return RE-INDEX] (reindex-node form-id) state)))
+
+
+(defn reindex
+  
+  [state]
+  
+  (let [{return-id :id} (meta (:return state))
+
+        {form-id :id} (meta (:form state))
+        
+        state (-reindex form-id state)
+        return-id* (:id (meta (:return state)))]
+    
+    (assoc state
+           :id-form form-id
+           :id-return return-id
+           :id-return* return-id*)))
+
+
+
+(defmulti frame->animation :op)
+
+(defmethod frame->animation :default
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  (when (= id-return id-return*)
+
+    :jump-replace))
+
+(defmethod frame->animation :constant
+  
+  [_]
+
+  nil)
+
+(defmethod frame->animation :collection
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  nil)
+
+(defmethod frame->animation :symbol
+  
+  [{:keys [return] :as frame}]
+  
+  (when-not (var? return)
+    
+    :symbol-resolve))
+
+(defmethod frame->animation :invoke
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  (if (= id-return id-return*)
+
+    :jump-replace
+
+    :replace-w-new-code))
+
+(defmethod frame->animation :lambda-exit
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  nil)
+
+(defmethod frame->animation :if
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  :jump-replace)
+
+(defmethod frame->animation :lambda
+  
+  [{:keys [id-return id-return*] :as frame}]
+
+  :jump-replace)
+
+(defmethod frame->animation :def
+  
+  [_]
+
+  nil)
+
+
+
+(defn attach-animation-data
+  
+  [frame]
+
+  (if-let [a (frame->animation frame)]
+
+    (assoc frame :animation a)
+
+    frame))
+
+
+
+
+
+;;####################################################################
+;; Indexing
+;;####################################################################
+
+
+(def form
+  (ob.utils/walk-ids '(do
+
+                        (def fact
+                          (fn [n]
+                            (if (= 0 n)
+                              1
+                              (* n (fact (- n 1))))))
+
+                        (fact 4))))
+
+(defn form->animation-stream
+  
+  [form]
+  
+  (let [format (fn [frame]
+                 (dissoc frame :k :env))
+
+        f (comp attach-animation-data format)]
+
+    (->> (gen-evaluation-stream form env (fn [frame _] {:form frame}))
+         (map f)
+         (filter :animation)
+         (take-while identity))))
+
+
+
+;;####################################################################
+;; Indexing
+;;####################################################################
+
+(def t (analyze (ob.utils/walk-ids '(+ 1 2 3 (- 4 5 5))) env))
+
+
+(defn branch?
+  [node]
+  (or (vector? node)
+      (:children node)))
+
+(defn children
+  [node]
+  (if (vector? node)
+    node
+    (let [ks (:children node)]
+      (conj (s/select [(s/submap ks) s/MAP-VALS] node) ::k))))
+
+(defn make-node
+  
+  [node children]
+  
+  (if (vector? node)
+    
+    (into (empty node) children)
+    
+    (let [ks (:children node)]
+
+      (merge node (zipmap ks (butlast children))))))
+
+
+
+(defn eval-zipper
+  [node]
+  (z/zipper branch? children make-node node))
+
+(defn eval-traverse
+  [node]
+  (def counter (atom 0))
+  (loop [loc (eval-zipper node)
+         env env]
+
+    (swap! counter inc)
+    
+    (when (< @counter 100)
+      (if (z/end? loc)
+        nil
+        (let [node (z/node loc)
+
+              next-fn (cond
+                        (= node ::k) (fn [loc]
+                                       (pprint (:form (z/node (z/up loc))))
+                                       (z/next loc))
+
+                        :else z/next)]
+
+          
+          (recur (next-fn loc)
+                 env))))))
 
 

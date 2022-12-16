@@ -186,7 +186,7 @@ goog.addDependency("../re_frame/std_interceptors.js", ['re_frame.std_interceptor
 goog.addDependency("../re_frame/subs.js", ['re_frame.subs'], ['re_frame.interop', 're_frame.trace', 're_frame.registrar', 'cljs.core', 're_frame.utils', 're_frame.loggers', 're_frame.db']);
 goog.addDependency("../re_frame/core.js", ['re_frame.core'], ['re_frame.interop', 're_frame.interceptor', 're_frame.events', 're_frame.settings', 're_frame.fx', 're_frame.registrar', 'cljs.core', 're_frame.router', 're_frame.utils', 'clojure.set', 're_frame.std_interceptors', 're_frame.loggers', 're_frame.subs', 're_frame.cofx', 're_frame.db']);
 goog.addDependency("../ob/utils.js", ['ob.utils'], ['com.rpl.specter', 'cljs.core', 're_frame.core']);
-goog.addDependency("../ob/data_to_hiccup.js", ['ob.data_to_hiccup'], ['com.rpl.specter', 'ob.utils', 'cljs.core']);
+goog.addDependency("../ob/data_to_hiccup.js", ['ob.data_to_hiccup'], ['com.rpl.specter', 'ob.utils', 'reagent.core', 'cljs.core']);
 goog.addDependency("../ob/core_test.js", ['ob.core_test'], ['cljs.core', 'cljs.test']);
 goog.addDependency("../ob/test_runner.js", ['ob.test_runner'], ['cljs.core', 'figwheel.main.testing', 'ob.core_test']);
 goog.addDependency("../cljs/core/async/impl/buffers.js", ['cljs.core.async.impl.buffers'], ['cljs.core', 'cljs.core.async.impl.protocols']);
@@ -207,10 +207,10 @@ goog.addDependency("../ob/transitions.js", ['ob.transitions'], ['com.rpl.specter
 goog.addDependency("../ob/update_db.js", ['ob.update_db'], ['com.rpl.specter', 'cljs.core', 'ob.transitions', 'ob.db_nav']);
 goog.addDependency("../ob/event_loop.js", ['ob.event_loop'], ['com.rpl.specter', 'ob.utils', 'cljs.core', 'cljs.core.async', 'ob.db_nav', 'ob.update_db', 're_frame.core']);
 goog.addDependency("../cljsjs/react-dom/development/react-dom.inc.js", ['react_dom', 'cljsjs.react.dom'], ['react'], {'foreign-lib': true});
+goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
 goog.addDependency("../cljs/spec/alpha.js", ['cljs.spec.alpha'], ['cljs.core', 'goog.object', 'clojure.string', 'clojure.walk', 'cljs.spec.gen.alpha']);
 goog.addDependency("../cljs/repl.js", ['cljs.repl'], ['goog.string', 'cljs.core', 'goog.string.format', 'cljs.spec.alpha']);
-goog.addDependency("../ob/clojure.js", ['ob.clojure'], ['com.rpl.specter', 'cljs.pprint', 'cljs.repl', 'cljs.core']);
-goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
+goog.addDependency("../ob/clojure.js", ['ob.clojure'], ['com.rpl.specter', 'clojure.zip', 'ob.utils', 'cljs.core', 'cljs.pprint', 'ob.analyzer', 'cljs.repl']);
 goog.addDependency("../ob/defs.js", ['ob.defs'], ['cljs.core']);
 goog.addDependency("../reagent/dom.js", ['reagent.dom'], ['reagent.impl.util', 'reagent.impl.protocols', 'reagent.ratom', 'cljs.core', 'reagent.impl.template', 'reagent.impl.batching', 'reagent.impl.input', 'react_dom']);
 goog.addDependency("../ob/core.js", ['ob.core'], ['ob.db_nav', 'ob.scroll', 'ob.clojure', 'ob.analyzer', 'ob.data_to_hiccup', 'ob.defs', 'ob.utils', 'ob.event_loop', 'com.rpl.specter', 'cljsjs.d3', 'cljs.pprint', 'cljs.repl', 'clojure.zip', 'goog.dom', 'reagent.core', 'reagent.dom', 're_frame.core', 'cljs.core']);

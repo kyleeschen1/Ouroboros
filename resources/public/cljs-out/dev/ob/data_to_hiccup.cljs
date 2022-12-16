@@ -4,7 +4,8 @@
   (:require
 
    [ob.utils :refer [<sub]]
-   [com.rpl.specter :as s])
+   [com.rpl.specter :as s]
+   [reagent.core :as reagent])
   
   (:require-macros
    [com.rpl.specter :refer [defnav comp-paths]]))
@@ -37,11 +38,23 @@
   
   ([id ctx]
 
-   (fn [id ctx]
-     
-     (let [datum (<sub [:id->data id])]
+   (reagent/create-class
+
+    {:component-did-update (fn [_ ]
+                             nil
+                             #_(println id " updated."))
+
+     :component-did-mount (fn [_ ]
+                            nil
+                             #_(println id " mounted."))
+
+     :reagent-render
+
+     (fn [id ctx]
        
-       [datum->hiccup datum ctx]))))
+       (let [datum (<sub [:id->data id])]
+   
+         [datum->hiccup datum ctx]))})))
 
 
 (defn datum->hiccup
@@ -65,7 +78,9 @@
 
   {:id (str id)
    :style style
-   ;;  :on-transition-end (fn [] (pprint (str "End " id)))
+   #_:on-transition-end #_(fn []
+                        (println (str "End " id))
+                        (println style))
    :class (conj class (when-not children
                      "token"))})
 

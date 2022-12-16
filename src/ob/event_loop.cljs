@@ -76,6 +76,7 @@
 
   (a/put! events (vec args)))
 
+
 ;;------------------------------
 ;; Core Loop
 ;;------------------------------
@@ -183,7 +184,7 @@
  (fn [[time blocking-channel]]
 
    (go
-     (a/<! (a/timeout (or time 20)))
+     (a/<! (a/timeout time))
      (a/close! blocking-channel))))
 
 

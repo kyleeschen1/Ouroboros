@@ -93,7 +93,8 @@
 (defmethod update-db :replace
   
   [{pre :id/pre post :id/post data :data} db]
-
+  (println pre)
+  (println post)
   (-> db
       (assoc-in [:display pre :redirect] post)
       (update :display merge data)))
@@ -102,8 +103,7 @@
   
   [{:keys [id]} db]
   
-  (dissoc db :display id))
-
+  (assoc-in db [:display id] nil))
 
 (defmethod update-db :update
   
@@ -155,8 +155,12 @@
                         (partial t/apply-trs-to-display-data trs trs-speed)
                         db)]
 
+    
+
     {:db db
-     :time (* trs-speed (:time trs))}))
+     :time (let [t (get trs :time 0.1)]
+             (* trs-speed t))}))
+
 
 
 

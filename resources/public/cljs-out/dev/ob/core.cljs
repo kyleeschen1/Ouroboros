@@ -3,7 +3,7 @@
 
    [ob.db-nav :as db]
    [ob.scroll :refer [set-scroll-trigger]]
-   [ob.clojure]
+   [ob.clojure :as c]
    [ob.analyzer :refer [analyze]]
    
    [ob.data-to-hiccup :refer [render]]
@@ -27,6 +27,7 @@
    [reagent.dom :as rdom]
    
    [re-frame.core :as rf :refer [reg-sub dispatch subscribe]])
+
   
   (:require-macros
    [com.rpl.specter :refer [defnav comp-paths]]))
@@ -92,24 +93,116 @@
 (def AST-DESC AST-POST-WALK)
 
 ;;#######################################################################
-;; AST -> DB
+;; Hiccup Navigators
 ;;#######################################################################
 
-(defnav desc [k]
+(def DATA s/MAP-VALS)
+
+(defn datum->child-ids
+
+  ([datum]
+   (datum->child-ids datum true))
+  
+  ([datum parens?]
+   (flatten (s/select [DATA (s/submap [:children (when parens? :parens)]) s/MAP-VALS] datum))))
+
+(defnav parens
+
+ [id]
+  
+ (select* [_ db next-fn]
+           
+           (let [ids (:parens (id db))]
+             
+             (next-fn (select-keys db ids))))
+  
+  (transform* [_ db next-fn]
+              
+              (let [ids (:parens (id db))]
+                
+                (merge db (next-fn (select-keys db ids))))))
+
+
+(defnav children
+
+  [id parens?]
+
+  (select* [_ db next-fn]
+           
+           (let [child-ids (datum->child-ids (id db))]
+             
+             (next-fn (s/select (s/submap child-ids) db))))
+  
+  (transform* [_ db next-fn]
+              (let [child-ids (datum->child-ids (id db))]
+                (merge db (s/transform (s/submap child-ids) next-fn db)))))
+
+
+
+
+(defnav desc
+
+  [k]
+  
+  (select* [this db next-fn]
+
+           (let [col (volatile! {})]
+
+             (letfn [(gather [k]
+
+                       (let [datum (select-keys db [k])]
+                         
+                         (vswap! col conj datum)
+                         
+                         (doseq [c (datum->child-ids datum)]
+                           
+                           (gather c))))]
+
+                  (gather k)
+                  
+                  (next-fn @col))))
+  
+  (transform* [this db next-fn]
+              
+              (let [col (volatile! db)]
+
+                (letfn [(gather [k]
+
+                          (let [datum (select-keys db [k])]
+                            
+                            (vswap! col conj (next-fn datum))
+                            
+                            (doseq [c (datum->child-ids datum)]
+                              
+                              (gather c))))]
+
+                  (gather k)
+                  
+                  (apply merge db @col)))))
+
+
+(defnav desc-but-node
+
+  [k node-id]
   
   (select* [this db next-fn]
 
            (let [col (volatile! [])]
 
-                (letfn [(gather [k]
-                          
-                          (vswap! col conj (next-fn (k db)))
-                          
-                          (doseq [c (get-in db [k :children])]
-                            
-                            (gather c)))]
+             (letfn [(gather [k]
+
+                       (when-not (= k node-id)
+
+                         (let [datum (select-keys db [k])]
+                           
+                           (vswap! col conj (next-fn datum))
+                           
+                           (doseq [c (datum->child-ids datum)]
+                             
+                             (gather c)))))]
 
                   (gather k)
+                  
                    @col)))
   
   (transform* [this db next-fn]
@@ -117,15 +210,68 @@
               (let [col (volatile! db)]
 
                 (letfn [(gather [k]
-                          
-                          (vswap! col update k next-fn)
-                          
-                          (doseq [c (get-in db [k :children])]
-                            
-                            (gather c)))]
+
+                          (when-not (= k node-id)
+
+                            (let [datum (select-keys db [k])]
+                              
+                              (vswap! col conj (next-fn datum))
+                              
+                              (doseq [c (datum->child-ids datum)]
+                                
+                                (gather c)))))]
 
                   (gather k)
+                  
                   @col))))
+
+(defnav desc-nodes
+
+  [k]
+  
+  (select* [this db next-fn]
+
+           (let [col (volatile! [])]
+
+             (letfn [(gather [k]
+
+                       (let [datum (select-keys db [k])
+                             ci (datum->child-ids datum)]
+
+                         (if (seq ci)
+
+                           (doseq [c ci]
+                             
+                             (gather c))
+                           
+                           (vswap! col conj (next-fn datum)))))]
+
+                  (gather k)
+                  
+                   @col)))
+  
+  (transform* [this db next-fn]
+              
+              (let [col (volatile! db)]
+
+                (letfn [(gather [k]
+
+                          (let [datum (select-keys db [k])
+                                ci (datum->child-ids datum)]
+
+                         (if (seq ci)
+
+                           (doseq [c ci]
+                             
+                             (gather c))
+                           
+                           (vswap! col conj (next-fn datum)))))]
+
+                  (gather k)
+                  
+                  @col))))
+
+
 
 ;;#######################################################################
 ;; AST -> Datum
@@ -140,8 +286,10 @@
     {id {:op :syntax
          :id id
          :depth depth
+         :style {:font-color "white"}
          :class #{"bracket" tag (str parent-id "-bracket" )}
          :name text}}))
+
 
 (defn add-paren-data
   
@@ -285,8 +433,11 @@
 
 ;;#######################################################################
 ;; Animations
-;;######################################################################
+;;########################################################################
 
+(defn idx-clj->data
+  [form]
+  (apply merge (ast->data (analyze form {}))))
 
 (defmethod animate :rewind
   [_ _ _]
@@ -331,6 +482,19 @@
      :time 1
      :data data}))
 
+
+(defmethod animate :append-indexed-code
+  
+  [_ _ [code]]
+  
+  (let [data (idx-clj->data code)
+        
+        id  (:id (meta code))]
+    
+    {:op :append
+     :id/parent id
+     :time 1
+     :data data}))
 
 
 
@@ -383,6 +547,260 @@
                         (* depth interval))}))
 
 
+(def form
+  (walk-ids
+   '(do
+
+      (def fact
+        (fn [n]
+          (if (= 0 n)
+            1
+            (* n (fact (- n 1))))))
+
+      (fact 4))))
+
+
+(def Y
+  '(((fn [f]
+       ((fn [self self]
+          (self self))
+        (fn [next]
+          (f (fn [value]
+               ((next next) value))))))
+     (fn [fact]
+       (fn [n]
+         (if (zero? n)
+           1
+           (* n (fact (- n 1))))))) 2))
+
+(def form*
+  (walk-ids Y))
+
+
+(rf/reg-event-db
+
+ :init-animation-stream
+
+ (fn [db [_ stream]]
+
+   (s/setval [:animation] stream db)))
+
+
+
+(defn update-depth
+  
+  [db data id-form id-return]
+  
+  (let [return-depth (:depth (id-return data))
+        former-depth 0;;(:depth (id-form db))
+
+        depth-delta (- former-depth return-depth)
+
+        data (s/transform [s/MAP-VALS :depth] #(+ % depth-delta) data)]
+    
+    data))
+
+
+(defmulti format-style*
+  (fn [tag _]
+    tag))
+
+(defmethod format-style* :contract
+  [_ _]
+  {:font-size "0px"
+   :padding-top "0px"
+   :padding-bottom "0px"
+   :padding-right "0px"
+   :padding-left "0px"})
+
+(defmethod format-style* :expand
+  [_ _]
+  {:font-size nil
+   :padding-top nil
+   :padding-bottom nil
+   :padding-right nil
+   :padding-left nil})
+
+(defn format-style
+  [tag data]
+  (println tag)
+  (update-styles data (fn [datum]
+                        (format-style* tag datum))))
+
+
+(defmethod animate :symbol-resolve
+  
+  [_ db [{:keys [form id-form return id-return id-return*]}]]
+
+  (let [;; Processing New Data
+
+        data (idx-clj->data return)
+
+       ;; (:data (animate :append-indexed-code nil [return]))
+        data (update-depth db data id-form id-return*)
+
+
+        data (format-style :contract data)
+
+        ;; Expanding the new form
+        data* (format-style :expand data)
+    
+
+        trs (:trs (animate :expand data* nil))
+
+        ;; Contracting the old form
+        form-ids (s/select [WALK-ALL s/META :id] form)
+        form-data (s/select-one [(desc id-form)] db)
+        form-data (format-style :contract form-data)]
+
+    [{:op :update
+      :data form-data
+      :trs {:data {id-form {:dur 4 :delay 0} } :time 4}}
+     
+     {:op :replace
+      :data data
+      :id/pre id-form
+      :id/post id-return*}
+     
+     {:op :update
+      :data data*
+      :trs trs}]))
+
+
+
+(defmethod animate :jump-replace
+  
+  [_ db [{:keys [form id-form return id-return]}]]
+  
+  (let [;;ids (s/select [WALK-ALL s/META :id] return)
+        
+        ;;data (s/select-one (s/submap ids) db)
+        data (s/select-one (desc id-return) db)
+        data (update-depth db data id-form id-return)
+
+        ;;form-ids (s/select [WALK-ALL s/META :id] form)
+        ;;form-data (s/select-one (s/submap form-ids) db)
+
+        form-data (s/select-one (desc id-form) db)
+
+     
+        result-ids (set (keys data))
+        form-data (update-styles form-data
+                                 (fn [{:keys [id children]}]
+                                   (if-not (or children (result-ids id))
+                                     {:opacity 0})))
+
+        form-data* (update-styles form-data
+                                 (fn [{:keys [id children]}]
+                                   (if-not (or children (result-ids id))
+                                     
+                                     {:font-size "0px"
+                                      :padding-top "0px"
+                                      :padding-bottom "0px"
+                                      :padding-left "0px"
+                                      :padding-right "0px"})))
+        
+        trs (get-trs-data form-data*
+                          (fn []
+                        
+                            {:dur 4
+                             :delay 0}))
+
+       ;; data (format-style :contract data)
+
+        ;; Expanding the new form
+        ;;data* (format-style :expand data)
+        ;;trs-new (:trs (animate :expand data* nil))
+        ]
+
+    [{:op :update
+      :data form-data
+      :trs trs}
+
+     {:op :update
+      :data form-data*
+      :trs trs}
+     
+     {:op :replace
+      :data data
+      :id/pre id-form
+      :id/post id-return}
+
+    ;; (animate :expand data nil)
+     ]))
+
+
+
+(defmethod animate :replace-w-new-code
+  
+  [_ db [{:keys [form id-form return id-return id-return*]}]]
+  
+  (let [data (idx-clj->data return)
+        data (update-depth db data id-form id-return*)]
+
+    {:op :replace
+     :data data
+     :id/pre id-form
+     :id/post id-return*}))
+
+
+(def completed?
+  #{:symbol-resolve :jump-replace :replace-w-new-code})
+
+(rf/reg-fx
+
+ :call-animation
+
+ (fn [a]
+   
+   (let [{:keys [animation] :as frame} a]
+
+     (println "########################")
+     (println animation)
+     
+     (when (completed? animation)
+       
+       (animate! animation frame)))))
+
+(rf/reg-event-fx
+
+ :trigger-next-event!
+
+ (fn [{:keys [db]} _]
+
+   (if-let [a false;;(s/select-one [:animation-history (db :id/curr-db)] db)
+            ]
+
+      {:db db
+       :call-animation a}
+     
+     (let #_[[a & as] (s/select-one [db/CURR-DB :animation] db)
+           db (s/setval [db/CURR-DB :animation] as db)
+             db (s/setval [:animation-history (db :id/curr-db)] a db)]
+
+          [[a & as] (:animation db)]
+       
+       {:db (assoc db :animation as)
+        :call-animation a}))))
+
+
+
+(defn init-code-eval
+  []
+  (let [stream (c/form->animation-stream form)]
+    (>evt [:init-animation-stream stream])
+    (animate! :append-indexed-code form)))
+
+
+(defn init-eval-button
+  []
+  [:div
+   [:button {:on-click init-code-eval}
+    "Init Code Eval!"]
+   [:br]
+   [:button {:on-click #(>evt [:trigger-next-event!])}
+    "Walk Evaluation Forward"]])
+
 
  ;;#######################################################################
  ;; Event Handlers
@@ -408,6 +826,12 @@
 
    (get db :display)))
 
+(defn id->display-data
+  [display id]
+  (let [datum (get display id)]
+    (if-let [redirect-id (:redirect datum)]
+      (recur display redirect-id)
+      datum)))
 
 (rf/reg-sub
 
@@ -417,7 +841,7 @@
  
  (fn [display [_ id]]
    
-   (get display id)))
+   (id->display-data display id)))
 
 
 
@@ -559,7 +983,8 @@
                
                {:standard-block 3000
                 :trs-speed 200
-                :paused? false})
+                :paused? false
+                :animation-history {}})
 
          db (s/setval [db/CURR-DB :display] init-display db)]
 
@@ -665,7 +1090,10 @@
    
    [:br]
    
-   [:button {:on-click #(animate! :rewind)} "Undo"]])
+   [:button {:on-click #(animate! :rewind)} "Undo"]
+
+   [:br]
+   [init-eval-button]])
 
 
 
