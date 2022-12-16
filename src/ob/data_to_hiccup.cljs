@@ -312,3 +312,13 @@
      [:div.row [render op] [render bindings]]
      
      [:div.row [:div.indent] [render body ctx]]]))
+
+(defmethod position-children :def
+  
+  [{:keys [children] :as form} ctx]
+
+  (let [[op sym val] children]
+
+    [:div.col
+     [:div.row [render op] [render sym nil]]
+     [:div.row [:div.indent] [:div.col  [render val ctx]]]]))

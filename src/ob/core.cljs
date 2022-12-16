@@ -140,6 +140,18 @@
 
 
 
+(defn lookup-by-id
+  
+  [db id]
+  
+  (let [val (get db id)]
+    
+    (if-let [r (:redirect val)]
+      
+      (recur db r)
+      
+      {id val})))
+
 (defnav desc
 
   [k]
@@ -150,7 +162,7 @@
 
              (letfn [(gather [k]
 
-                       (let [datum (select-keys db [k])]
+                       (let [datum (lookup-by-id db k)]
                          
                          (vswap! col conj datum)
                          
@@ -168,7 +180,7 @@
 
                 (letfn [(gather [k]
 
-                          (let [datum (select-keys db [k])]
+                          (let [datum (lookup-by-id db k)]
                             
                             (vswap! col conj (next-fn datum))
                             
@@ -184,26 +196,26 @@
 (defnav desc-but-node
 
   [k node-id]
-  
+
   (select* [this db next-fn]
 
-           (let [col (volatile! [])]
+           (let [col (volatile! {})]
 
              (letfn [(gather [k]
 
-                       (when-not (= k node-id)
-
-                         (let [datum (select-keys db [k])]
+                       (let [datum (lookup-by-id db k)]
+                         
+                         (when-not (= node-id (ffirst datum))
                            
-                           (vswap! col conj (next-fn datum))
+                           (vswap! col conj datum)
                            
                            (doseq [c (datum->child-ids datum)]
                              
                              (gather c)))))]
-
+         
                   (gather k)
                   
-                   @col)))
+                  (next-fn @col))))
   
   (transform* [this db next-fn]
               
@@ -211,19 +223,17 @@
 
                 (letfn [(gather [k]
 
-                          (when-not (= k node-id)
-
-                            (let [datum (select-keys db [k])]
+                          (let [datum (lookup-by-id db k)]
+                            
+                            (vswap! col conj (next-fn datum))
+                            
+                            (doseq [c (datum->child-ids datum)]
                               
-                              (vswap! col conj (next-fn datum))
-                              
-                              (doseq [c (datum->child-ids datum)]
-                                
-                                (gather c)))))]
+                              (gather c))))]
 
                   (gather k)
                   
-                  @col))))
+                  (apply merge db @col)))))
 
 (defnav desc-nodes
 
@@ -286,7 +296,7 @@
     {id {:op :syntax
          :id id
          :depth depth
-         :style {:font-color "white"}
+    
          :class #{"bracket" tag (str parent-id "-bracket" )}
          :name text}}))
 
@@ -350,6 +360,7 @@
      :pos-type pos-type
      :class #{op type}
      :name name
+     :style {:opacity "100%"}
      :depth depth
      :parent-id parent-id
      :children child-ids}))
@@ -591,12 +602,19 @@
   
   [db data id-form id-return]
   
-  (let [return-depth (:depth (id-return data))
-        former-depth 0;;(:depth (id-form db))
+  (let [return-depth (let [depth (:depth (id-return data))]
+                       (if (zero? depth)
+                         1
+                         depth))
+        
+        former-depth 0;;
 
         depth-delta (- former-depth return-depth)
 
-        data (s/transform [s/MAP-VALS :depth] #(+ % depth-delta) data)]
+        data (s/transform [s/MAP-VALS :depth]
+                          (fn [depth]
+                            (+ depth depth-delta))
+                          data)]
     
     data))
 
@@ -633,7 +651,6 @@
   [_ db [{:keys [form id-form return id-return id-return*]}]]
 
   (let [;; Processing New Data
-
         data (idx-clj->data return)
 
        ;; (:data (animate :append-indexed-code nil [return]))
@@ -645,11 +662,9 @@
         ;; Expanding the new form
         data* (format-style :expand data)
     
-
         trs (:trs (animate :expand data* nil))
 
         ;; Contracting the old form
-        form-ids (s/select [WALK-ALL s/META :id] form)
         form-data (s/select-one [(desc id-form)] db)
         form-data (format-style :contract form-data)]
 
@@ -672,62 +687,62 @@
   
   [_ db [{:keys [form id-form return id-return]}]]
   
-  (let [;;ids (s/select [WALK-ALL s/META :id] return)
+  (let [;; return data
         
-        ;;data (s/select-one (s/submap ids) db)
-        data (s/select-one (desc id-return) db)
-        data (update-depth db data id-form id-return)
 
-        ;;form-ids (s/select [WALK-ALL s/META :id] form)
-        ;;form-data (s/select-one (s/submap form-ids) db)
+        form-data (s/select-one (desc-but-node id-form id-return) db)
 
-        form-data (s/select-one (desc id-form) db)
-
-     
-        result-ids (set (keys data))
-        form-data (update-styles form-data
+        opaque (update-styles form-data
                                  (fn [{:keys [id children]}]
-                                   (if-not (or children (result-ids id))
-                                     {:opacity 0})))
+                                   (if-not children
+                                     {
+                                      :opacity 0.2
+                                    ;;  :padding-top "0px"
+                                   ;;   :padding-bottom "0px"
+                                    ;;  :padding-left "0px"
+                                    ;;  :padding-right "0px"
+                                      })))
 
-        form-data* (update-styles form-data
+        op-trs (get-trs-data opaque (fn []
+                                       {:dur 4
+                                        :delay 0}))
+
+        form-data* (update-styles opaque
                                  (fn [{:keys [id children]}]
-                                   (if-not (or children (result-ids id))
-                                     
-                                     {:font-size "0px"
-                                      :padding-top "0px"
-                                      :padding-bottom "0px"
-                                      :padding-left "0px"
-                                      :padding-right "0px"})))
+                                   #_(when-not children)
+                                   {:font-size "0px"
+                                    
+                                    :padding-top "0px"
+                                    :padding-bottom "0px"
+                                    :padding-left "0px"
+                                    :padding-right "0px"}))
         
-        trs (get-trs-data form-data*
-                          (fn []
-                        
-                            {:dur 4
-                             :delay 0}))
+        trs (get-trs-data form-data* (fn []
+                                       {:dur 10
+                                        :delay 0}))
 
-       ;; data (format-style :contract data)
 
-        ;; Expanding the new form
-        ;;data* (format-style :expand data)
-        ;;trs-new (:trs (animate :expand data* nil))
-        ]
+        return-data (s/select-one (desc id-return) db)
+
+        
+
+        trs-return (get-trs-data return-data (fn []
+                                       {:dur 0
+                                        :delay 0}))]
 
     [{:op :update
-      :data form-data
-      :trs trs}
+      :data opaque
+      :trs op-trs}
 
      {:op :update
       :data form-data*
       :trs trs}
      
      {:op :replace
-      :data data
+      :data return-data
       :id/pre id-form
-      :id/post id-return}
-
-    ;; (animate :expand data nil)
-     ]))
+      :id/post id-return
+      :trs trs-return }]))
 
 
 

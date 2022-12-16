@@ -184,6 +184,17 @@
    :then (analyze then env)
    :else (analyze else env)})
 
+
+(defmethod analyze-sexpr :def
+  [[op sym val :as form] env]
+  
+  {:op :def
+   :form form
+   :children [:operator :sym :val]
+   :operator (analyze-sf op env)
+   :sym (analyze sym env)
+   :val (analyze val env)})
+
 (defmethod analyze-sexpr :do
   [[op & args :as form] env]
 

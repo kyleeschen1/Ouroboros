@@ -713,14 +713,14 @@
       (Constant. result {:id (gensym (str id "-const-"))})
       
       (s/transform [s/META] (fn [m]
-                                  (let [r-id (if-let [r-id (:id m)]
-                                               (symbol (str id "-" r-id))
-                                               (gensym ""))
+                              (let [r-id (if-let [r-id (:id m)]
+                                           (symbol (str id "-" r-id))
+                                           (gensym ""))
 
-                                        c-ids (when-let [c (:child-ids m)]
-                                                (mapv  #(symbol (str id "-" %)) c))]
+                                    c-ids (when-let [c (:child-ids m)]
+                                            (mapv  #(symbol (str id "-" %)) c))]
 
-                                    (assoc m :id r-id :child-ids c-ids)))
+                                (assoc m :id r-id :child-ids c-ids)))
                    result))))
 
 (defn reindex?
@@ -794,7 +794,7 @@
 
     :jump-replace
 
-    :replace-w-new-code))
+    :symbol-resolve))
 
 (defmethod frame->animation :lambda-exit
   
