@@ -505,10 +505,10 @@
 ;; Frame Generation
 ;;#######################################################################
 
-(defn idx-clj->data
-  [form]
-  (apply merge (ast->data (analyze form {}))))
 
+;;#######################################################################
+;; Transitions
+;;#######################################################################
 
 (defn get-trs-data
 
@@ -528,8 +528,6 @@
 
      {:data trs-data
       :time max-time})))
-
-
 
 (defn trs-by-depth
   [f]
@@ -599,14 +597,88 @@
     
     {:opacity opacity}))
 
+;;=========================================================
+;; Miscellaneous
+;;=========================================================
+
+(defn update-depth
+  
+  [id data]
+  
+  (let [root-depth (let [depth (:depth (id data))]
+                       (if (zero? depth)
+                         1
+                         depth))
+        f (fn [depth]
+              (- depth root-depth))]
+    
+    (s/transform [s/MAP-VALS :depth] f data)))
+
+
+(defn idx-clj->data
+  [form]
+  (apply merge (ast->data (analyze form {}))))
+
 
 ;;#######################################################################
 ;; Gen Frames Implementation
 ;;#######################################################################
 
+(defmethod gen-frames :prev
+  
+  [{vs :db-versions id :curr-db-id :as db}]
+
+  (let [id (s/select-one [:db-versions id :id/prev-db] db)]
+ 
+    {:op :jump
+     :id id}))
+
 (defmethod gen-frames :rewind
-  [_]
-  {:op :prev})
+  
+  [{vs :db-versions id :curr-db-id :as db}]
+
+  (loop [id id
+         acc []]
+
+    (let [id (s/select-one [id :id/prev-db] vs)]
+
+      (cond
+
+        (nil? id)
+        acc
+
+        (-> vs id :tags (contains? :step))
+        (conj acc {:op :jump :id id} {:op :prev})
+
+        :else
+        (recur id (conj acc {:op :jump :id id}))))))
+
+(defmethod gen-frames :fastforward
+  
+  [{vs :db-versions id :curr-db-id :as db}]
+
+  (loop [id id
+         seen-step? false
+         acc []]
+
+    (let [id (s/select-one [id :id/next-db] vs)]
+
+      (cond
+
+        (nil? id)
+        acc
+
+        (-> vs id :tags (contains? :step))
+        (if seen-step?
+          acc
+          (recur id
+                 true
+                 (conj acc {:op :jump :id id})))
+
+        :else
+        (recur id
+               seen-step?
+               (conj acc {:op :jump :id id}))))))
 
 
 (defmethod gen-frames :clj/append
@@ -626,119 +698,93 @@
      :time 1
      :data data}))
 
-(defn update-depth
-  
-  [data id-return]
-  
-  (let [return-depth (let [depth (:depth (id-return data))]
-                       (if (zero? depth)
-                         1
-                         depth))
-        
-        former-depth 0;;
-
-        depth-delta (- former-depth return-depth)
-
-        data (s/transform [s/MAP-VALS :depth]
-                          (fn [depth]
-                            (+ depth depth-delta))
-                          data)]
-    
-    data))
-
-
-
-
 (defmethod gen-frames :symbol-resolve
   
-  [{:keys [form id-form return id-return id-return* dom]}]
-
-  (pprint "Gen Symbol Resolve")
-
+  [{:keys [new id-old id-new id-new* dom]}]
+  
   (let [;; Processing New Data
-        data (idx-clj->data return)
-        
-        data (update-depth data id-return*)
-
-
-        data (update-styles :contract data)
+        new-data (->> (idx-clj->data new)
+                      (update-depth id-new*)
+                      (update-styles :contract))
 
         ;; Expanding the new form
-        data* (update-styles :expand data)
-    
-        trs (expand data*)
-        #_(:trs (animate :expand data* nil))
+        new-expanded (update-styles :expand new-data)
 
         ;; Contracting the old form
-        form-data (s/select-one [(desc id-form)] dom)
-        form-data (update-styles :contract form-data)]
+        old-data (->> (s/select-one (desc id-old) dom)
+                      (update-styles :contract))]
 
     [{:op :update
-      :data form-data
-      :trs {:data {id-form {:dur 4 :delay 0} } :time 4}}
+      :tags #{:step}
+      :data old-data
+      :trs {:data {id-old {:dur 4 :delay 0} } :time 4}}
      
      {:op :replace
-      :data data
-      :id/pre id-form
-      :id/post id-return*}
+      :data new-data
+      :id/pre id-old
+      :id/post id-new*}
      
      {:op :update
-      :data data*
-      :trs trs}]))
+      :data new-expanded
+      :trs (expand new-expanded)}]))
 
 
 
 (defmethod gen-frames :jump-replace
   
-  [{:keys [form id-form return id-return dom]}]
+  [{:keys [old id-old new id-new dom]}]
   
-  (let [form-data (s/select-one (desc-but-node id-form id-return) dom)
+  (let [;; Fade surrounding nodes
+        old-faded (->> dom
+                       (s/select-one (desc-but-node id-old id-new))
+                       (update-styles :fade))
 
-        opaque (update-styles :fade form-data)
+        old-faded-trs (get-trs-data old-faded (fn []
+                                              {:dur 4
+                                               :delay 0}))
 
-        op-trs (get-trs-data opaque (fn []
-                                       {:dur 4
-                                        :delay 0}))
-
-        form-data* (update-styles :contract opaque)
-        
-        trs (get-trs-data form-data* (fn []
-                                       {:dur 10
-                                        :delay 0}))
+        ;; Then contract the surrounding nodes
+        old-contracted (update-styles :contract old-faded)
+        old-contracted-trs (get-trs-data old-contracted (fn []
+                                                          {:dur 10
+                                                           :delay 0}))
 
 
-        return-data (s/select-one (desc id-return) dom)
-
-       
-        trs-return (get-trs-data return-data (fn []
-                                       {:dur 0
-                                        :delay 0}))]
+        ;; Then replace with new nodes
+        new-data (s/select-one (desc id-new) dom)
+        new-trs (get-trs-data new-data (fn []
+                                         {:dur 0
+                                          :delay 0}))]
 
     [{:op :update
-      :data opaque
-      :trs op-trs}
+      :tags #{:step}
+      :data old-faded
+      :trs old-faded-trs}
 
      {:op :update
-      :data form-data*
-      :trs trs}
+      :data old-contracted
+      :trs old-contracted-trs}
      
      {:op :replace
-      :data return-data
-      :id/pre id-form
-      :id/post id-return
-      :trs trs-return }]))
+      :data new-data
+      :id/pre id-old
+      :id/post id-new
+      :trs new-trs}]))
 
 (defmethod gen-frames :replace-w-new-code
   
-  [{:keys [form id-form return id-return id-return* dom]}]
+  [{:keys [id-new* id-old new dom]}]
   
-  (let [data (idx-clj->data return)
-        data (update-depth data id-return*)]
+  (let [data (idx-clj->data new)
+        data (update-depth id-new* data)]
 
     {:op :replace
+     :tags #{:step}
      :data data
-     :id/pre id-form
-     :id/post id-return*}))
+     :id/pre id-old
+     :id/post id-new*}))
+
+
 
  ;;#######################################################################
  ;; Running the Animations
@@ -747,16 +793,19 @@
 
 (rf/reg-event-db
 
- :init-animation-stream
+ :init-process
 
  (fn [db [_ stream]]
 
-   (s/setval [:animation] stream db)))
+   (s/setval [db/CURR-DB :process] stream db)))
 
 (defn init-code-eval
+  
   [form]
+  
   (let [stream (c/form->animation-stream form)]
-    (>evt [:init-animation-stream stream])
+    
+    (>evt [:init-process stream])
     (animate! {:op/frame :clj/append :indexed? true :code form})))
 
 
@@ -783,19 +832,16 @@
 
  (fn [{:keys [db]} _]
 
-   (if-let [a false;;(s/select-one [:animation-history (db :id/curr-db)] db)
-            ]
+   (if (s/select-one [db/CURR-DB :id/next-db] db)
 
-      {:db db
-       :call-animation a}
-     
-     (let #_[[a & as] (s/select-one [db/CURR-DB :animation] db)
-           db (s/setval [db/CURR-DB :animation] as db)
-             db (s/setval [:animation-history (db :id/curr-db)] a db)]
+     {:call-animation {:op/frame :fastforward}}
+  
+     (let [[a & as] (s/select-one [db/CURR-DB :process] db)
+           db (s/setval [db/CURR-DB :process] as db)]
 
-          [[a & as] (:animation db)]
+          #_[[a & as] (:animation db)]
        
-       {:db (assoc db :animation as)
+       {:db db ;;(assoc db :animation as)
         :call-animation a}))))
 
 
@@ -835,9 +881,14 @@
   [:div
    [:button {:on-click #(init-code-eval form)}
     "Init Code Eval!"]
+   
    [:br]
+   [:button {:on-click #(animate! {:op/frame :rewind})}
+    "<"]
    [:button {:on-click #(>evt [:trigger-next-event!])}
-    "Walk Evaluation Forward"]])
+    ">"]
+
+   ])
 
 
 ;;#######################################################################

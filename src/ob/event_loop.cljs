@@ -32,13 +32,16 @@
   embellised with the following keys:
 
   - :dom -> display data
-  - :versions -> versions of the display data"
+  - :versions -> versions of the display data, keyed by verson id
+  - :curr-db-id -> current version id"
     
   [instr db]
   
   (let [dom (s/select-one [db/CURR-DB :display] db)
-        vs (s/select-one [:versions] db)
-        instr (assoc instr :dom dom :versions vs)
+        vs (:db-versions db)
+        instr (assoc instr :dom dom
+                     :db-versions vs
+                     :curr-db-id (:id/curr-db db))
 
         frames (gen-frames instr)]
 

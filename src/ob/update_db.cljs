@@ -61,7 +61,8 @@
         curr-db-id (keyword (gensym "version-"))
 
         new-version (merge new-version {:id/prev-db prev-db-id
-                                        :id/curr-db curr-db-id})
+                                        :id/curr-db curr-db-id
+                                        :tags (:tags frame)})
 
         ;; Update db version ids
         db* (-> (assoc db :id/curr-db curr-db-id :id/last-db prev-db-id)
@@ -120,6 +121,22 @@
 (defmulti change-db-version
   (fn [{:keys [op]} _]
     op))
+
+
+(defn jump-to-db
+  
+  [id db]
+  
+  (if-let [version (s/select-one [:db-versions id] db)]
+
+    (s/setval :id/curr-db (:id/curr-db version) db)
+    
+    db))
+
+(defmethod change-db-version :jump 
+  [{:keys [id]} db]
+  (jump-to-db id db))
+
 
 (defmethod change-db-version :prev
   [_ db]

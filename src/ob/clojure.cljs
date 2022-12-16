@@ -750,9 +750,11 @@
         return-id* (:id (meta (:return state)))]
     
     (assoc state
-           :id-form form-id
-           :id-return return-id
-           :id-return* return-id*)))
+           :old (:form state)
+           :new (:return state)
+           :id-old form-id
+           :id-new return-id
+           :id-new* return-id*)))
 
 
 
@@ -760,9 +762,9 @@
 
 (defmethod frame->animation :default
   
-  [{:keys [id-return id-return*] :as frame}]
+  [{:keys [id-new id-new*] :as frame}]
 
-  (when (= id-return id-return*)
+  (when (= id-new id-new*)
 
     :jump-replace))
 
@@ -774,7 +776,7 @@
 
 (defmethod frame->animation :collection
   
-  [{:keys [id-return id-return*] :as frame}]
+  [_]
 
   nil)
 
@@ -788,9 +790,9 @@
 
 (defmethod frame->animation :invoke
   
-  [{:keys [id-return id-return*] :as frame}]
+  [{:keys [id-new id-new*] :as frame}]
 
-  (if (= id-return id-return*)
+  (if (= id-new id-new*)
 
     :jump-replace
 
@@ -798,19 +800,19 @@
 
 (defmethod frame->animation :lambda-exit
   
-  [{:keys [id-return id-return*] :as frame}]
+  [_]
 
   nil)
 
 (defmethod frame->animation :if
   
-  [{:keys [id-return id-return*] :as frame}]
+  [_]
 
   :jump-replace)
 
 (defmethod frame->animation :lambda
   
-  [{:keys [id-return id-return*] :as frame}]
+  [_]
 
   :jump-replace)
 
