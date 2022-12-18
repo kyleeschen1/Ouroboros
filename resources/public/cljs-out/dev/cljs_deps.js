@@ -200,12 +200,12 @@ goog.addDependency("../cljsjs/d3/development/d3.inc.js", ['d3', 'cljsjs.d3'], []
 goog.addDependency("../cljs/spec/gen/alpha.js", ['cljs.spec.gen.alpha'], ['goog.Uri', 'cljs.core']);
 goog.addDependency("../cljsjs/waypoints/development/waypoints.inc.js", ['waypoints', 'cljsjs.waypoints'], [], {'foreign-lib': true});
 goog.addDependency("../ob/scroll.js", ['ob.scroll'], ['cljs.core', 'cljsjs.waypoints']);
-goog.addDependency("../ob/db_nav.js", ['ob.db_nav'], ['com.rpl.specter', 'cljs.core']);
-goog.addDependency("../ob/transitions.js", ['ob.transitions'], ['com.rpl.specter', 'cljs.core']);
-goog.addDependency("../ob/update_db.js", ['ob.update_db'], ['ob.transitions', 'ob.db_nav', 'com.rpl.specter', 'cljs.core']);
 goog.addDependency("../cljs/core/async/impl/timers.js", ['cljs.core.async.impl.timers'], ['cljs.core.async.impl.channels', 'cljs.core.async.impl.dispatch', 'cljs.core', 'cljs.core.async.impl.protocols']);
 goog.addDependency("../cljs/core/async.js", ['cljs.core.async'], ['cljs.core.async.impl.channels', 'cljs.core.async.impl.dispatch', 'cljs.core', 'cljs.core.async.impl.buffers', 'cljs.core.async.impl.protocols', 'cljs.core.async.impl.ioc_helpers', 'cljs.core.async.impl.timers']);
-goog.addDependency("../ob/event_loop.js", ['ob.event_loop'], ['ob.db_nav', 'ob.update_db', 'ob.utils', 'com.rpl.specter', 'cljs.core.async', 're_frame.core', 'cljs.core']);
+goog.addDependency("../ob/db_nav.js", ['ob.db_nav'], ['com.rpl.specter', 'cljs.core']);
+goog.addDependency("../ob/transitions.js", ['ob.transitions'], ['com.rpl.specter', 'cljs.core']);
+goog.addDependency("../ob/update_db.js", ['ob.update_db'], ['com.rpl.specter', 'cljs.core', 'ob.transitions', 'ob.db_nav']);
+goog.addDependency("../ob/event_loop.js", ['ob.event_loop'], ['com.rpl.specter', 'ob.utils', 'cljs.core', 'cljs.core.async', 'ob.db_nav', 'ob.update_db', 're_frame.core']);
 goog.addDependency("../cljsjs/react-dom/development/react-dom.inc.js", ['react_dom', 'cljsjs.react.dom'], ['react'], {'foreign-lib': true});
 goog.addDependency("../ob/analyzer.js", ['ob.analyzer'], ['ob.utils', 'cljs.core']);
 goog.addDependency("../cljs/spec/alpha.js", ['cljs.spec.alpha'], ['cljs.core', 'goog.object', 'clojure.string', 'clojure.walk', 'cljs.spec.gen.alpha']);

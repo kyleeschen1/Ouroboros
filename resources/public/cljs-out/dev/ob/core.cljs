@@ -809,6 +809,9 @@
     (animate! {:op/frame :clj/append :indexed? true :code form})))
 
 
+
+
+
 (def completed?
   #{:symbol-resolve :jump-replace :replace-w-new-code})
 
@@ -818,9 +821,6 @@
  :call-animation
 
  (fn [a]
-   
-   (println "########################")
-   (println (:op/frame a))
    
    (when (completed? (:op/frame a))
      
@@ -876,19 +876,161 @@
   (walk-ids Y))
 
 
+(defn pause-button
+  []
+  (let [paused? (<sub [:paused?])]
+     [:button {:on-click #(>evt [:toggle-pause])}
+      paused?]))
+
 (defn init-eval-button
   []
+  
   [:div
+   
    [:button {:on-click #(init-code-eval form)}
-    "Init Code Eval!"]
+    
+    "Load Code"]
    
    [:br]
+   [pause-button]
    [:button {:on-click #(animate! {:op/frame :rewind})}
     "<"]
    [:button {:on-click #(>evt [:trigger-next-event!])}
     ">"]
 
    ])
+
+
+(defn init-processes
+  [form]
+  (cons {:op/frame :clj/append :indexed? true :code form}(c/form->animation-stream form)))
+
+(def init-process
+  {:processes {:id->process {"item-0" (init-processes form)}}
+   :expo ["item-0"]})
+
+(rf/reg-sub
+
+ :processes
+
+ (fn [db _]
+   (:processes db)))
+
+(rf/reg-sub
+
+ :id->process
+
+ :<- [:processes]
+ 
+ (fn [processes [_ id]]
+   (get-in processes [:id->process id])))
+
+(rf/reg-sub
+
+ :expos
+ 
+ (fn [processes _]
+   (get processes :expo)))
+
+(rf/reg-event-db
+
+ :register-process
+
+ (fn [db [_ id next-id]] 
+
+   (println id)
+   (println next-id)
+
+   (let [[_ & fs] (get-in db [:processes :id->process id])
+
+         db (assoc-in db [:processes :id->process next-id] fs)
+         db (update db :expo conj next-id)]
+
+     db)))
+
+(rf/reg-fx
+
+ :run!
+
+ (fn [f]
+   (println "###########################################")
+   (animate! f)))
+
+(rf/reg-event-fx
+
+ :run-the-process
+
+ (fn [{:keys [db]} [_ id]] 
+
+   (let [[f & _ :as fas] (get-in db [:processes :id->process id])]
+     
+     {:run! f })))
+
+
+(defn gen-trigger-fn
+        [init? id next-id]
+        (fn [_]
+          (set-scroll-trigger id (fn [x]        
+                                   (when (and (not @init?)
+                                              (= "down" x))     
+                                     (println "Expos ==============")
+                                     (swap! init? not)
+                                     (>evt [:register-process id next-id]))
+
+                                   (if (= "down" x)
+                                     (>evt [:run-the-process id])
+                                     (animate! {:op/frame :rewind}))))))
+
+(defn gen-div
+  
+  [id k]
+  
+  (let [next-id (gensym)
+        init? (atom false)
+
+        [f & _] (<sub [:id->process id])]
+    
+    (reagent/create-class
+     
+     {:component-did-update
+      (fn [_]
+        (println "Updated")
+        (println id))
+      
+      :component-did-mount
+      (gen-trigger-fn init? id next-id)
+
+      
+      :reagent-render
+      (fn [id k]
+        ^{:key id}
+        [:div
+         [:br]
+         [:br]
+         [:div "Entering : " id]
+         [:br]
+         [:div "Method : " (str (:op f))]
+         [:div "Old Form : " (str (:old f))]
+         [:div "New Form : " (str (:new f))]
+         [:div "Enviroment : " (str (:env f))]
+         [:div {:id id}]
+         [:br]
+         [:div "Exiting :" id]
+         [:br]
+         [:br]])})))
+
+
+
+(defn gen-expostion-hiccup
+  []
+  (let [expos (<sub [:expos])]
+    
+    (into [:div {:style {:margin-top "50%"}}]
+          (doall
+           (map (fn [e i]               
+                  [gen-div e identity])
+                expos
+                (range))))))
 
 
 ;;#######################################################################
@@ -1062,6 +1204,13 @@
           :pos-type :root
           :children []}})
 
+(def init-animation-params
+  {
+   :standard-block 3000
+   :trs-speed 200
+   :paused? false
+   :animation-history {}})
+
 (rf/reg-event-fx
 
  :initialize
@@ -1069,17 +1218,13 @@
  (fn [_ _]
 
    (let [db (merge  db/init-db
-               
-               {:standard-block 3000
-                :trs-speed 200
-                :paused? false
-                :animation-history {}})
+                    init-animation-params
+                    init-process)
 
          db (s/setval [db/CURR-DB :display] init-display db)]
 
-     {:init-event-loop! nil
-      
-      :db db})))
+     {:db db
+      :init-event-loop! nil})))
 
 (defn init
   []
@@ -1117,9 +1262,9 @@
   '(let [x 1
          z (let [t (let [e r]
                      (loop [x {:a b
-                              :c 3
-                              :b {:k 2
-                                  :c 4}}]
+                               :c 3
+                               :b {:k 2
+                                   :c 4}}]
                        (fn [x y]
                          (if true
                            3
@@ -1170,17 +1315,8 @@
             :max 400
             :value (<sub [:trs-speed-slider-val])
             :on-change #(>evt [:update-trs-speed (.. % -target -value)])}]
+  
    
-   [:br]
-   
-   [:br]
-   
-   [:button {:on-click #(>evt [:toggle-pause])} (<sub [:paused?])]
-   
-   [:br]
-   
-   [:button {:on-click #(animate! {:op/frame :rewind})} "Undo"]
-
    [:br]
    [init-eval-button]])
 
@@ -1225,7 +1361,7 @@
   [:div#main-page
 
    ($ {:display "flex"
-       :height "5000px"})
+       :height "10000px"})
 
    [:div ($ {:width "30%"
              :height "100%"
@@ -1234,7 +1370,7 @@
             {:class "token"})
     
     [:h1 "Ouroboros"]
-    [text-col]]
+    [gen-expostion-hiccup]]
 
    [:div ($ {:width "70%"
              :flex-direction "row"
